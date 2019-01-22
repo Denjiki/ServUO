@@ -11,66 +11,91 @@ namespace Server.Engines.Harvest
     {
         private readonly Item m_Tool;
         private readonly HarvestSystem m_System;
+
         public HarvestTarget(Item tool, HarvestSystem system)
             : base(-1, true, TargetFlags.None)
         {
-            this.m_Tool = tool;
-            this.m_System = system;
+            m_Tool = tool;
+            m_System = system;
 
-            this.DisallowMultis = true;
+            DisallowMultis = true;
         }
 
         protected override void OnTarget(Mobile from, object targeted)
         {
-            if (this.m_System is Mining && targeted is StaticTarget)
+            if (m_System is Mining)
             {
-                int itemID = ((StaticTarget)targeted).ItemID;
-
-                // grave
-                if (itemID == 0xED3 || itemID == 0xEDF || itemID == 0xEE0 || itemID == 0xEE1 || itemID == 0xEE2 || itemID == 0xEE8)
+                if (targeted is StaticTarget)
                 {
-                    PlayerMobile player = from as PlayerMobile;
+                    int itemID = ((StaticTarget)targeted).ItemID;
 
-                    if (player != null)
+                    // grave
+                    if (itemID == 0xED3 || itemID == 0xEDF || itemID == 0xEE0 || itemID == 0xEE1 || itemID == 0xEE2 || itemID == 0xEE8)
                     {
-                        QuestSystem qs = player.Quest;
+                        PlayerMobile player = from as PlayerMobile;
 
-                        if (qs is WitchApprenticeQuest)
+                        if (player != null)
                         {
-                            FindIngredientObjective obj = qs.FindObjective(typeof(FindIngredientObjective)) as FindIngredientObjective;
+                            QuestSystem qs = player.Quest;
 
-                            if (obj != null && !obj.Completed && obj.Ingredient == Ingredient.Bones)
+                            if (qs is WitchApprenticeQuest)
                             {
-                                player.SendLocalizedMessage(1055037); // You finish your grim work, finding some of the specific bones listed in the Hag's recipe.
-                                obj.Complete();
+                                FindIngredientObjective obj = qs.FindObjective(typeof(FindIngredientObjective)) as FindIngredientObjective;
 
-                                return;
+                                if (obj != null && !obj.Completed && obj.Ingredient == Ingredient.Bones)
+                                {
+                                    player.SendLocalizedMessage(1055037); // You finish your grim work, finding some of the specific bones listed in the Hag's recipe.
+                                    obj.Complete();
+
+                                    return;
+                                }
                             }
                         }
                     }
                 }
+                else if (targeted is LandTarget && ((LandTarget)targeted).TileID >= 113 && ((LandTarget)targeted).TileID <= 120)
+                {
+                    if (Server.Engines.Quests.TheGreatVolcanoQuest.OnHarvest(from, m_Tool))
+                        return;
+                }
             }
 
-            if (this.m_System is Lumberjacking && targeted is IChopable)
+            if (m_System is Lumberjacking && targeted is IChopable)
                 ((IChopable)targeted).OnChop(from);
-            else if (this.m_System is Lumberjacking && targeted is IAxe && this.m_Tool is BaseAxe)
+            else if (m_System is Lumberjacking && targeted is IAxe && m_Tool is BaseAxe)
             {
                 IAxe obj = (IAxe)targeted;
                 Item item = (Item)targeted;
 					
                 if (!item.IsChildOf(from.Backpack))
                     from.SendLocalizedMessage(1062334); // This item must be in your backpack to be used.
-                else if (obj.Axe(from, (BaseAxe)this.m_Tool))
+                else if (obj.Axe(from, (BaseAxe)m_Tool))
                     from.PlaySound(0x13E);
             }
-            else if (this.m_System is Lumberjacking && targeted is ICarvable)
-                ((ICarvable)targeted).Carve(from, (Item)this.m_Tool);
-            else if (this.m_System is Lumberjacking && FurnitureAttribute.Check(targeted as Item))
-                this.DestroyFurniture(from, (Item)targeted);
-            else if (this.m_System is Mining && targeted is TreasureMap)
+            else if (m_System is Lumberjacking && targeted is ICarvable)
+                ((ICarvable)targeted).Carve(from, (Item)m_Tool);
+            else if (m_System is Lumberjacking && FurnitureAttribute.Check(targeted as Item))
+                DestroyFurniture(from, (Item)targeted);
+            else if (m_System is Mining && targeted is TreasureMap)
                 ((TreasureMap)targeted).OnBeginDig(from);
-            else
-                this.m_System.StartHarvesting(from, this.m_Tool, targeted);
+            #region High Seas
+            else if (m_System is Mining && targeted is NiterDeposit)
+                ((NiterDeposit)targeted).OnMine(from, m_Tool);
+            else if (m_System is Lumberjacking && targeted is CrackedLavaRockEast)
+                ((CrackedLavaRockEast)targeted).OnCrack(from);
+            else if (m_System is Lumberjacking && targeted is CrackedLavaRockSouth)
+                ((CrackedLavaRockSouth)targeted).OnCrack(from);
+            #endregion
+			else
+			{
+				// If we got here and we're lumberjacking then we didn't target something that can be done from the pack
+				if (m_System is Lumberjacking && m_Tool.Parent != from)
+				{
+					from.SendLocalizedMessage(500487); // The axe must be equipped for any serious wood chopping.
+					return;
+				}
+				m_System.StartHarvesting(from, m_Tool, targeted);
+			}
         }
 
         private void DestroyFurniture(Mobile from, Item item)

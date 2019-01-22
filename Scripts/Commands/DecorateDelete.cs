@@ -24,6 +24,7 @@ namespace Server.Commands
 
             m_Mobile.SendMessage("Deleting world decoration, please wait.");
 
+			// We still do all this for backward-compatibility
             Generate("Data/Decoration/Britannia", Map.Trammel, Map.Felucca);
             Generate("Data/Decoration/Trammel", Map.Trammel);
             Generate("Data/Decoration/Felucca", Map.Felucca);
@@ -31,7 +32,9 @@ namespace Server.Commands
             Generate("Data/Decoration/Malas", Map.Malas);
             Generate("Data/Decoration/Tokuno", Map.Tokuno);
 
-            m_Mobile.SendMessage("Deleting complete. {0} items were deleted.", m_Count);
+			WeakEntityCollection.Delete("deco");
+
+            m_Mobile.SendMessage("Deleting complete.");
         }
 
         public static void Generate(string folder, params Map[] maps)
@@ -553,7 +556,7 @@ namespace Server.Commands
                         int indexOf = this.m_Params[i].IndexOf('=');
 
                         if (indexOf >= 0)
-                            sp.SpawnNames.Add(this.m_Params[i].Substring(++indexOf));
+                            sp.SpawnObjects.Add(new Server.Mobiles.SpawnObject(this.m_Params[i].Substring(++indexOf)));
                     }
                     else if (this.m_Params[i].StartsWith("MinDelay"))
                     {
@@ -581,7 +584,7 @@ namespace Server.Commands
                         int indexOf = this.m_Params[i].IndexOf('=');
 
                         if (indexOf >= 0)
-                            sp.Count = Utility.ToInt32(this.m_Params[i].Substring(++indexOf));
+                            sp.MaxCount = Utility.ToInt32(this.m_Params[i].Substring(++indexOf));
                     }
                     else if (this.m_Params[i].StartsWith("Team"))
                     {

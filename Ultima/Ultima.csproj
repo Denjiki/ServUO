@@ -39,7 +39,7 @@
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
     <ConfigurationOverrideFile>
     </ConfigurationOverrideFile>
-    <DefineConstants>TRACE;DEBUG;ServUO</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;NEWTIMERS;ServUO</DefineConstants>
     <DocumentationFile>
     </DocumentationFile>
     <DebugSymbols>true</DebugSymbols>
@@ -66,7 +66,7 @@
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
     <ConfigurationOverrideFile>
     </ConfigurationOverrideFile>
-    <DefineConstants>TRACE;ServUO</DefineConstants>
+    <DefineConstants>TRACE;NEWTIMERS;ServUO</DefineConstants>
     <DocumentationFile>
     </DocumentationFile>
     <DebugSymbols>false</DebugSymbols>
@@ -82,7 +82,6 @@
     <DebugType>none</DebugType>
     <ErrorReport>prompt</ErrorReport>
     <GenerateSerializationAssemblies>Auto</GenerateSerializationAssemblies>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
     <UseVSHostingProcess>false</UseVSHostingProcess>
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -90,13 +89,12 @@
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>..\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;ServUO, Framework_4_0</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;NEWTIMERS;ServUO</DefineConstants>
     <BaseAddress>285212672</BaseAddress>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>full</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
     <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
@@ -110,21 +108,19 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
     <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
-    <DefineConstants>TRACE;ServUO, Framework_4_0</DefineConstants>
+    <DefineConstants>TRACE;NEWTIMERS;ServUO</DefineConstants>
     <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>..\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;ServUO, Framework_4_0</DefineConstants>
+    <DefineConstants>TRACE;DEBUG;NEWTIMERS;ServUO</DefineConstants>
     <BaseAddress>285212672</BaseAddress>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DebugType>full</DebugType>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
     <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
@@ -138,28 +134,14 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <GenerateSerializationAssemblies>Off</GenerateSerializationAssemblies>
     <ErrorReport>prompt</ErrorReport>
-    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
     <Prefer32Bit>false</Prefer32Bit>
-    <DefineConstants>TRACE;ServUO, Framework_4_0</DefineConstants>
+    <DefineConstants>TRACE;NEWTIMERS;ServUO</DefineConstants>
     <UseVSHostingProcess>false</UseVSHostingProcess>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="PresentationCore">
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="System">
-      <Name>System</Name>
-    </Reference>
-    <Reference Include="System.Data">
-      <Name>System.Data</Name>
-    </Reference>
+    <Reference Include="System" />
     <Reference Include="System.Drawing">
       <Name>System.Drawing</Name>
-    </Reference>
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xml" />
-    <Reference Include="WindowsBase">
-      <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -172,6 +154,7 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="ASCIIFont.cs" />
+    <Compile Include="AssemblyInfo.cs" />
     <Compile Include="CalibrationInfo.cs">
       <SubType>Code</SubType>
     </Compile>
@@ -205,6 +188,7 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="RadarCol.cs" />
+    <Compile Include="Settings.cs" />
     <Compile Include="SkillGroups.cs" />
     <Compile Include="Skills.cs" />
     <Compile Include="Sound.cs" />

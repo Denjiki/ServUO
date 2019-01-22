@@ -97,6 +97,11 @@ namespace Server.Spells
         {
         }
 
+        public virtual void SendAbilityMessage(Mobile m)
+        {
+            TextDefinition.SendMessageTo(m, AbilityMessage);
+        }
+
         public virtual bool IgnoreArmor(Mobile attacker)
         {
             return false;
@@ -123,11 +128,26 @@ namespace Server.Spells
         {
             double scalar = 1.0;
 
+            if (ManaPhasingOrb.IsInManaPhase(m))
+            {
+                ManaPhasingOrb.RemoveFromTable(m);
+                return 0;
+            }
+
             if (!Server.Spells.Necromancy.MindRotSpell.GetMindRotScalar(m, ref scalar))
+            {
                 scalar = 1.0;
+            }
+
+            if (Server.Spells.Mysticism.PurgeMagicSpell.IsUnderCurseEffects(m))
+            {
+                scalar += .5;
+            }
 
             // Lower Mana Cost = 40%
             int lmc = Math.Min(AosAttributes.GetValue(m, AosAttribute.LowerManaCost), 40);
+
+            lmc += BaseArmor.GetInherentLowerManaCost(m);
 
             scalar -= (double)lmc / 100;
 
@@ -190,30 +210,6 @@ namespace Server.Spells
                 from.SendLocalizedMessage(1063024); // You cannot perform this special move right now.
                 return false;
             }
-
-            #region Dueling
-            string option = null;
-
-            if (this is Backstab)
-                option = "Backstab";
-            else if (this is DeathStrike)
-                option = "Death Strike";
-            else if (this is FocusAttack)
-                option = "Focus Attack";
-            else if (this is KiAttack)
-                option = "Ki Attack";
-            else if (this is SurpriseAttack)
-                option = "Surprise Attack";
-            else if (this is HonorableExecution)
-                option = "Honorable Execution";
-            else if (this is LightningStrike)
-                option = "Lightning Strike";
-            else if (this is MomentumStrike)
-                option = "Momentum Strike";
-
-            if (option != null && !Engines.ConPVP.DuelContext.AllowSpecialMove(from, option, this))
-                return false;
-            #endregion
 
             return this.CheckSkills(from) && this.CheckMana(from, false);
         }
@@ -309,7 +305,9 @@ namespace Server.Spells
                 if (moveID > 0)
                     m.Send(new ToggleSpecialAbility(moveID + 1, true));
 
-                TextDefinition.SendMessageTo(m, move.AbilityMessage);
+                Server.Spells.SkillMasteries.SkillMasterySpell.OnToggleSpecialAbility(m);
+
+                move.SendAbilityMessage(m);
             }
 
             return true;

@@ -1,10 +1,4 @@
-﻿#region Header
-// **********
-// ServUO - Persistence.cs
-// **********
-#endregion
-
-#region References
+﻿#region References
 using System;
 using System.IO;
 #endregion
@@ -20,6 +14,8 @@ namespace Server
 
 		public static void Serialize(FileInfo file, Action<GenericWriter> serializer)
 		{
+			file.Refresh();
+
 			if (file.Directory != null && !file.Directory.Exists)
 			{
 				file.Directory.Create();
@@ -29,6 +25,8 @@ namespace Server
 			{
 				file.Create().Close();
 			}
+				
+			file.Refresh();
 
 			using (var fs = file.OpenWrite())
 			{
@@ -63,6 +61,8 @@ namespace Server
 
 		public static void Deserialize(FileInfo file, Action<GenericReader> deserializer, bool ensure)
 		{
+			file.Refresh();
+
 			if (file.Directory != null && !file.Directory.Exists)
 			{
 				if (!ensure)
@@ -72,40 +72,48 @@ namespace Server
 
 				file.Directory.Create();
 			}
-
-			bool created = false;
-
+			
 			if (!file.Exists)
 			{
 				if (!ensure)
 				{
-					throw new FileNotFoundException();
+					throw new FileNotFoundException
+					{
+						Source = file.FullName
+					};
 				}
 
 				file.Create().Close();
-				created = true;
 			}
+				
+			file.Refresh();
 
-			using (var fs = file.OpenRead())
-			{
-				var reader = new BinaryFileReader(new BinaryReader(fs));
+            using (var fs = file.OpenRead())
+            {
+                var reader = new BinaryFileReader(new BinaryReader(fs));
 
-				try
-				{
-					deserializer(reader);
-				}
-				catch (EndOfStreamException eos)
-				{
-					if (!created)
-					{
-						Console.WriteLine("[Persistence]: {0}", eos);
-					}
-				}
-				finally
-				{
-					reader.Close();
-				}
-			}
+                try
+                {
+                    deserializer(reader);
+                }
+                catch (EndOfStreamException eos)
+                {
+                    if (file.Length > 0)
+                    {
+                        throw new Exception(String.Format("[Persistance]: {0}", eos));
+                    }
+                }
+                catch (Exception e)
+                {
+                    Utility.WriteConsoleColor(ConsoleColor.Red, "[Persistance]: An error was encountered while loading a saved object");
+
+                    throw new Exception(String.Format("[Persistance]: {0}", e));
+                }
+                finally
+                {
+                    reader.Close();
+                }
+            }
 		}
 	}
 }

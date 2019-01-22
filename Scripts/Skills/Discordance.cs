@@ -1,9 +1,3 @@
-#region Header
-// **********
-// ServUO - Discordance.cs
-// **********
-#endregion
-
 #region References
 using System;
 using System.Collections;
@@ -12,6 +6,7 @@ using Server.Engines.XmlSpawner2;
 using Server.Items;
 using Server.Mobiles;
 using Server.Targeting;
+using Server.Engines.Quests;
 #endregion
 
 namespace Server.SkillHandlers
@@ -19,6 +14,11 @@ namespace Server.SkillHandlers
 	public class Discordance
 	{
 		private static readonly Hashtable m_Table = new Hashtable();
+
+        public static bool UnderEffects(Mobile m)
+        {
+            return m != null && m_Table.Contains(m);
+        }
 
 		public static void Initialize()
 		{
@@ -70,9 +70,18 @@ namespace Server.SkillHandlers
 			else
 			{
 				int range = (int)targ.GetDistanceToSqrt(from);
-				int maxRange = BaseInstrument.GetBardRange(from, SkillName.Discordance);
-
-				if (from.Map != targ.Map || range > maxRange)
+                int maxRange = BaseInstrument.GetBardRange(from, SkillName.Discordance);
+                Map targetMap = targ.Map;
+                
+                if(targ is BaseMount && ((BaseMount)targ).Rider != null)
+                {
+                    Mobile rider = ((BaseMount)targ).Rider;
+                
+                    range = (int)rider.GetDistanceToSqrt(from);
+                    targetMap = rider.Map;
+                }
+                
+				if (from.Map != targetMap || range > maxRange)
 				{
 					ends = true;
 				}
@@ -143,12 +152,25 @@ namespace Server.SkillHandlers
 						double diff = m_Instrument.GetDifficultyFor(targ) - 10.0;
 						double music = from.Skills[SkillName.Musicianship].Value;
 
-						diff += XmlMobFactions.GetScaledFaction(from, targ, -25, 25, -0.001);
+                        if (from is BaseCreature)
+                            music = 120.0;
+
+                        int masteryBonus = 0;
 
 						if (music > 100.0)
 						{
 							diff -= (music - 100.0) * 0.5;
 						}
+
+                        if (from is PlayerMobile)
+                        {
+                            masteryBonus = Spells.SkillMasteries.BardSpell.GetMasteryBonus((PlayerMobile)from, SkillName.Discordance);
+                        }
+
+                        if (masteryBonus > 0)
+                        {
+                            diff -= (diff * ((double)masteryBonus / 100));
+                        }
 
 						if (!BaseInstrument.CheckMusicianship(from))
 						{
@@ -170,21 +192,14 @@ namespace Server.SkillHandlers
 							{
 								double discord = from.Skills[SkillName.Discordance].Value;
 
-								if (discord > 100.0)
-								{
-									effect = -20 + (int)((discord - 100.0) / -2.5);
-								}
-								else
-								{
-									effect = (int)(discord / -5.0);
-								}
+							    effect = (int)Math.Max(-28.0, (discord / -4.0));
 
 								if (Core.SE && BaseInstrument.GetBaseDifficulty(targ) >= 160.0)
 								{
 									effect /= 2;
 								}
 
-								scalar = effect * 0.01;
+								scalar = (double)effect / 100;
 
 								mods.Add(new ResistanceMod(ResistanceType.Physical, effect));
 								mods.Add(new ResistanceMod(ResistanceType.Fire, effect));
@@ -196,7 +211,7 @@ namespace Server.SkillHandlers
 								{
 									if (targ.Skills[i].Value > 0)
 									{
-										mods.Add(new DefaultSkillMod((SkillName)i, true, targ.Skills[i].Value * scalar));
+                                        mods.Add(new DefaultSkillMod((SkillName)i, true, targ.Skills[i].Value * scalar));
 									}
 								}
 							}
@@ -213,7 +228,7 @@ namespace Server.SkillHandlers
 								{
 									if (targ.Skills[i].Value > 0)
 									{
-										mods.Add(new DefaultSkillMod((SkillName)i, true, targ.Skills[i].Value * scalar));
+										mods.Add(new DefaultSkillMod((SkillName)i, true, Math.Max(100, targ.Skills[i].Value) * scalar));
 									}
 								}
 							}
@@ -221,17 +236,35 @@ namespace Server.SkillHandlers
 							DiscordanceInfo info = new DiscordanceInfo(from, targ, Math.Abs(effect), mods);
 							info.m_Timer = Timer.DelayCall(TimeSpan.Zero, TimeSpan.FromSeconds(1.25), ProcessDiscordance, info);
 
+                            #region Bard Mastery Quest
+                            if (from is PlayerMobile)
+                            {
+                                BaseQuest quest = QuestHelper.GetQuest((PlayerMobile)from, typeof(WieldingTheSonicBladeQuest));
+
+                                if (quest != null)
+                                {
+                                    foreach (BaseObjective objective in quest.Objectives)
+                                        objective.Update(targ);
+                                }
+                            }
+                            #endregion
+
 							m_Table[targ] = info;
-						}
+
+                            from.NextSkillTime = Core.TickCount + (8000 - ((masteryBonus / 5) * 1000));
+                        }
 						else
 						{
+                            if (from is BaseCreature && PetTrainingHelper.Enabled)
+                                from.CheckSkill(SkillName.Discordance, 0, from.Skills[SkillName.Discordance].Cap);
+
 							from.SendLocalizedMessage(1049540); // You fail to disrupt your target
 							m_Instrument.PlayInstrumentBadly(from);
 							m_Instrument.ConsumeUse(from);
-						}
 
-						from.NextSkillTime = Core.TickCount + 12000;
-					}
+                            from.NextSkillTime = Core.TickCount + 5000;
+                        }                        
+                    }
 					else
 					{
 						m_Instrument.PlayInstrumentBadly(from);

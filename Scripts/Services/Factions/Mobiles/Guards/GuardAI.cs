@@ -1,9 +1,3 @@
-#region Header
-// **********
-// ServUO - GuardAI.cs
-// **********
-#endregion
-
 #region References
 using System;
 using System.Collections.Generic;
@@ -261,14 +255,16 @@ namespace Server.Factions
 
 		public int GetStatMod(Mobile mob, StatType type)
 		{
-			StatMod mod = mob.GetStatMod(String.Format("[Magic] {0} Offset", type));
+			int offset = 0;
+			StatMod buff = mob.GetStatMod(String.Format("[Magic] {0} Buff", type));
+			StatMod curse = mob.GetStatMod(String.Format("[Magic] {0} Curse", type));
 
-			if (mod == null)
-			{
-				return 0;
-			}
+			if (buff != null)
+				offset += buff.Offset;
+			if (curse != null)
+				offset += curse.Offset;
 
-			return mod.Offset;
+			return offset;
 		}
 
 		public Spell RandomOffenseSpell()
@@ -322,7 +318,7 @@ namespace Server.Factions
 				Mobile active = null;
 				double activePrio = 0.0;
 
-				Mobile comb = m_Mobile.Combatant;
+				Mobile comb = m_Mobile.Combatant as Mobile;
 
 				if (comb != null && !comb.Deleted && comb.Alive && !comb.IsDeadBondedPet && m_Mobile.InRange(comb, 12) &&
 					CanDispel(comb))
@@ -391,7 +387,7 @@ namespace Server.Factions
 					Mobile active = null, inactive = null;
 					double actPrio = 0.0, inactPrio = 0.0;
 
-					Mobile comb = m_Mobile.Combatant;
+					Mobile comb = m_Mobile.Combatant as Mobile;
 
 					if (comb != null && !comb.Deleted && comb.Alive && !comb.IsDeadBondedPet && CanDispel(comb))
 					{
@@ -399,7 +395,9 @@ namespace Server.Factions
 						actPrio = inactPrio = m_Mobile.GetDistanceToSqrt(comb);
 					}
 
-					foreach (Mobile m in m_Mobile.GetMobilesInRange(12))
+                    IPooledEnumerable eable = m_Mobile.GetMobilesInRange(12);
+
+					foreach (Mobile m in eable)
 					{
 						if (m != m_Mobile && CanDispel(m))
 						{
@@ -418,6 +416,8 @@ namespace Server.Factions
 							}
 						}
 					}
+
+                    eable.Free();
 
 					return active != null ? active : inactive;
 				}
@@ -511,7 +511,7 @@ namespace Server.Factions
 				return false;
 			}
 
-			Mobile combatant = m_Guard.Combatant;
+			Mobile combatant = m_Guard.Combatant as Mobile;
 
 			if (combatant == null || combatant.Deleted || !combatant.Alive || combatant.IsDeadBondedPet ||
 				!m_Mobile.CanSee(combatant) || !m_Mobile.CanBeHarmful(combatant, false) || combatant.Map != m_Mobile.Map)
@@ -520,7 +520,7 @@ namespace Server.Factions
 				// Try to find another combatant
 				if (AcquireFocusMob(m_Mobile.RangePerception, m_Mobile.FightMode, false, false, true))
 				{
-					m_Mobile.Combatant = combatant = m_Mobile.FocusMob;
+					m_Mobile.Combatant = combatant = m_Mobile.FocusMob as Mobile;
 					m_Mobile.FocusMob = null;
 				}
 				else
@@ -533,7 +533,7 @@ namespace Server.Factions
 			{
 				if (AcquireFocusMob(m_Mobile.RangePerception, m_Mobile.FightMode, false, false, true))
 				{
-					m_Mobile.Combatant = combatant = m_Mobile.FocusMob;
+					m_Mobile.Combatant = combatant = m_Mobile.FocusMob as Mobile;
 					m_Mobile.FocusMob = null;
 				}
 				else if (!m_Mobile.InRange(combatant, 36))

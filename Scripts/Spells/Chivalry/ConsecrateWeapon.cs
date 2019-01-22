@@ -1,5 +1,5 @@
 using System;
-using System.Collections;
+using System.Collections.Generic;
 using Server.Items;
 
 namespace Server.Spells.Chivalry
@@ -10,7 +10,9 @@ namespace Server.Spells.Chivalry
             "Consecrate Weapon", "Consecrus Arma",
             -1,
             9002);
-        private static readonly Hashtable m_Table = new Hashtable();
+
+        private static Dictionary<Mobile, ConsecratedWeaponContext> m_Table = new Dictionary<Mobile, ConsecratedWeaponContext>();
+
         public ConsecrateWeaponSpell(Mobile caster, Item scroll)
             : base(caster, scroll, m_Info)
         {
@@ -62,7 +64,7 @@ namespace Server.Spells.Chivalry
         {
             BaseWeapon weapon = this.Caster.Weapon as BaseWeapon;
 
-            if (weapon == null || weapon is Fists)
+            if (Caster.Player && (weapon == null || weapon is Fists))
             {
                 this.Caster.SendLocalizedMessage(501078); // You must be holding a weapon.
             }
@@ -102,43 +104,127 @@ namespace Server.Spells.Chivalry
                 double seconds = this.ComputePowerValue(20);
 
                 // TODO: Should caps be applied?
-                if (seconds < 3.0)
-                    seconds = 3.0;
-                else if (seconds > 11.0)
+
+                int pkarma = this.Caster.Karma;
+
+                if (pkarma > 5000)
                     seconds = 11.0;
+                else if (pkarma >= 4999)
+                    seconds = 10.0;
+                else if (pkarma >= 3999)
+                    seconds = 9.00;
+                else if (pkarma >= 2999)
+                    seconds = 8.0;
+                else if (pkarma >= 1999)
+                    seconds = 7.0;
+                else if (pkarma >= 999)
+                    seconds = 6.0;
+                else
+                    seconds = 5.0;
 
                 TimeSpan duration = TimeSpan.FromSeconds(seconds);
+                ConsecratedWeaponContext context;
 
-                Timer t = (Timer)m_Table[weapon];
+                if (IsUnderEffects(Caster))
+                {
+                    context = m_Table[Caster];
 
-                if (t != null)
-                    t.Stop();
+                    if (context.Timer != null)
+                    {
+                        context.Timer.Stop();
+                        context.Timer = null;
+                    }
 
-                weapon.Consecrated = true;
+                    context.Weapon = weapon;
+                }
+                else
+                {
+                    context = new ConsecratedWeaponContext(Caster, weapon);
+                }
 
-                m_Table[weapon] = t = new ExpireTimer(weapon, duration);
+                weapon.ConsecratedContext = context;
+                context.Timer = Timer.DelayCall<Mobile>(duration, RemoveEffects, Caster);
 
-                t.Start();
+                m_Table[Caster] = context;
+
+                BuffInfo.AddBuff(Caster, new BuffInfo(BuffIcon.ConsecrateWeapon, 1151385, 1151386, duration, Caster, String.Format("{0}\t{1}", context.ConsecrateProcChance, context.ConsecrateDamageBonus)));
             }
 
             this.FinishSequence();
         }
 
-        private class ExpireTimer : Timer
+        public static bool IsUnderEffects(Mobile m)
         {
-            private readonly BaseWeapon m_Weapon;
-            public ExpireTimer(BaseWeapon weapon, TimeSpan delay)
-                : base(delay)
-            {
-                this.m_Weapon = weapon;
-                this.Priority = TimerPriority.FiftyMS;
-            }
+            return m_Table.ContainsKey(m);
+        }
 
-            protected override void OnTick()
+        public static void RemoveEffects(Mobile m)
+        {
+            if (m_Table.ContainsKey(m))
             {
-                this.m_Weapon.Consecrated = false;
-                Effects.PlaySound(this.m_Weapon.GetWorldLocation(), this.m_Weapon.Map, 0x1F8);
-                m_Table.Remove(this);
+                var context = m_Table[m];
+
+                context.Expire();
+
+                m_Table.Remove(m);
+            }
+        }
+    }
+
+    public class ConsecratedWeaponContext
+    {
+        public Mobile Owner { get; private set; }
+        public BaseWeapon Weapon { get; set; }
+
+        public Timer Timer { get; set; }
+
+        public int ConsecrateProcChance
+        {
+            get
+            {
+                if (!Core.SA || Owner.Skills.Chivalry.Value >= 80)
+                {
+                    return 100;
+                }
+
+                return (int)Owner.Skills.Chivalry.Value;
+            }
+        }
+
+        public int ConsecrateDamageBonus
+        {
+            get
+            {
+                if (Core.SA)
+                {
+                    double value = Owner.Skills.Chivalry.Value;
+
+                    if (value >= 90)
+                    {
+                        return (int)Math.Truncate((value - 90) / 2);
+                    }
+                }
+
+                return 0;
+            }
+        }
+
+        public ConsecratedWeaponContext(Mobile owner, BaseWeapon weapon)
+        {
+            Owner = owner;
+            Weapon = weapon;
+        }
+
+        public void Expire()
+        {
+            Weapon.ConsecratedContext = null;
+
+            Effects.PlaySound(Weapon.GetWorldLocation(), Weapon.Map, 0x1F8);
+
+            if (Timer != null)
+            {
+                Timer.Stop();
+                Timer = null;
             }
         }
     }
