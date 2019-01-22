@@ -27,6 +27,7 @@ namespace Server.Gumps
         Administer_Access,
         Administer_Access_Lockdown,
         Administer_Commands,
+        Administer_Maintenance,
         ClientInfo,
         AccountDetails,
         AccountDetails_Information,
@@ -158,7 +159,7 @@ namespace Server.Gumps
                 case AccessLevel.Player:
                 default:
                     {
-                        if (m.Kills >= 5)
+                        if (m.Murderer)
                             return 0x21;
                         else if (m.Criminal)
                             return 0x3B1;
@@ -214,7 +215,7 @@ namespace Server.Gumps
             this.AddBlackAlpha(10, 390, 400, 40);
 
             this.AddPageButton(10, 10, this.GetButtonID(0, 0), "INFORMATION", AdminGumpPage.Information_General, AdminGumpPage.Information_Perf);
-            this.AddPageButton(10, 30, this.GetButtonID(0, 1), "ADMINISTER", AdminGumpPage.Administer, AdminGumpPage.Administer_Access, AdminGumpPage.Administer_Commands, AdminGumpPage.Administer_Server, AdminGumpPage.Administer_WorldBuilding, AdminGumpPage.Administer_Access_Lockdown);
+            this.AddPageButton(10, 30, this.GetButtonID(0, 1), "ADMINISTER", AdminGumpPage.Administer, AdminGumpPage.Administer_Access, AdminGumpPage.Administer_Commands, AdminGumpPage.Administer_Server, AdminGumpPage.Administer_WorldBuilding, AdminGumpPage.Administer_Access_Lockdown, AdminGumpPage.Administer_Maintenance);
             this.AddPageButton(10, 50, this.GetButtonID(0, 2), "CLIENT LIST", AdminGumpPage.Clients, AdminGumpPage.ClientInfo);
             this.AddPageButton(10, 70, this.GetButtonID(0, 3), "ACCOUNT LIST", AdminGumpPage.Accounts, AdminGumpPage.Accounts_Shared, AdminGumpPage.AccountDetails, AdminGumpPage.AccountDetails_Information, AdminGumpPage.AccountDetails_Characters, AdminGumpPage.AccountDetails_Access, AdminGumpPage.AccountDetails_Access_ClientIPs, AdminGumpPage.AccountDetails_Access_Restrictions, AdminGumpPage.AccountDetails_Comments, AdminGumpPage.AccountDetails_Tags, AdminGumpPage.AccountDetails_ChangeAccess, AdminGumpPage.AccountDetails_ChangePassword);
             this.AddPageButton(10, 90, this.GetButtonID(0, 4), "FIREWALL", AdminGumpPage.Firewall, AdminGumpPage.FirewallInfo);
@@ -273,7 +274,6 @@ namespace Server.Gumps
                         this.AddLabel(20, 350, LabelHue, "Operating System: ");
                         string os = Environment.OSVersion.ToString();
 
-                        os = os.Replace("Microsoft", "MSFT");
                         os = os.Replace("Service Pack", "SP");
 
                         this.AddLabel(150, 350, LabelHue, os);
@@ -374,31 +374,9 @@ namespace Server.Gumps
                     {
                         this.AddHtml(10, 125, 400, 20, this.Color(this.Center("Generating"), LabelColor32), false, false);
 
-                        /*AddButtonLabeled(20, 150, GetButtonID(3, 100), "Documentation");
-                        AddButtonLabeled(220, 150, GetButtonID(3, 107), "Rebuild Categorization");*/
-
-                        #region Sender
-                        this.AddButtonLabeled(20, 150, this.GetButtonID(3, 137), "Decorate Mondain's Legacy");
-                        this.AddButtonLabeled(220, 150, this.GetButtonID(3, 138), "Remove Mondain's Legacy");
-                        #endregion
-
-                        this.AddButtonLabeled(20, 175, this.GetButtonID(3, 101), "Teleporters");
-                        this.AddButtonLabeled(220, 175, this.GetButtonID(3, 102), "Moongates");
-
-                        this.AddButtonLabeled(20, 200, this.GetButtonID(3, 103), "Vendors");
-                        this.AddButtonLabeled(220, 200, this.GetButtonID(3, 106), "Decoration");
-
-                        this.AddButtonLabeled(20, 225, this.GetButtonID(3, 104), "Doors");
-                        this.AddButtonLabeled(220, 225, this.GetButtonID(3, 105), "Signs");
-
-                        #region Sender
-                        this.AddButton(10, 175 - 1 + 5, 10006, 10006, this.GetButtonID(3, 131), GumpButtonType.Reply, 0); // TelGenDelete
-                        this.AddButton(210, 175 - 1 + 5, 10006, 10006, this.GetButtonID(3, 132), GumpButtonType.Reply, 0); // MoonGenDelete
-                        this.AddButton(10, 200 - 1 + 5, 10006, 10006, this.GetButtonID(3, 133), GumpButtonType.Reply, 0); // UOAMVendorsDelete
-                        this.AddButton(10, 225 - 1 + 5, 10006, 10006, this.GetButtonID(3, 134), GumpButtonType.Reply, 0); // DoorGenDelete
-                        this.AddButton(210, 225 - 1 + 5, 10006, 10006, this.GetButtonID(3, 135), GumpButtonType.Reply, 0); // SignGenDelete
-                        this.AddButton(210, 200 - 1 + 5, 10006, 10006, this.GetButtonID(3, 136), GumpButtonType.Reply, 0); // DecorateDelete
-                        #endregion
+                        this.AddButtonLabeled(20, 150, this.GetButtonID(3, 101), "Create World");
+                        this.AddButtonLabeled(20, 175, this.GetButtonID(3, 102), "Delete World");
+                        this.AddButtonLabeled(20, 200, this.GetButtonID(3, 103), "Recreate World");
 
                         this.AddHtml(20, 275, 400, 30, this.Color(this.Center("Statics"), LabelColor32), false, false);
 
@@ -492,6 +470,39 @@ namespace Server.Gumps
 
                         goto case AdminGumpPage.Administer;
                     }
+                case AdminGumpPage.Administer_Maintenance:
+                    {
+                        this.AddHtml(10, 125, 400, 20, this.Color(this.Center("Maintenance"), LabelColor32), false, false);
+
+                        this.AddButtonLabeled(20, 150, this.GetButtonID(3, 600), "Rebuild Categorization");
+                        this.AddButtonLabeled(220, 150, this.GetButtonID(3, 601), "Generate Documentation");
+
+                        if (Ultima.Files.MulPath["artlegacymul.uop"] != null || (Ultima.Files.MulPath["art.mul"] != null && Ultima.Files.MulPath["artidx.mul"] != null))
+                        {
+                            this.AddButtonLabeled(20, 180, this.GetButtonID(3, 602), "Rebuild Bounds.bin");
+                        }
+                        else
+                        {
+                            this.AddLabelCropped(55, 180, 120, 20, RedHue, "Rebuild Bounds.bin");
+                        }
+
+                        this.AddButtonLabeled(220, 180, this.GetButtonID(3, 603), "Generate Reports");
+
+                        this.AddHtml(10, 210, 400, 20, this.Color(this.Center("Profiling"), LabelColor32), false, false);
+
+                        this.AddButtonLabeled(20, 240, this.GetButtonID(3, 604), "Dump Timers");
+                        this.AddButtonLabeled(220, 240, this.GetButtonID(3, 605), "Count Objects");
+
+                        this.AddButtonLabeled(20, 270, this.GetButtonID(3, 606), "Profile World");
+                        this.AddButtonLabeled(220, 270, this.GetButtonID(3, 607), "Write Profiles");
+
+                        this.AddButtonLabeled(20, 300, this.GetButtonID(3, 608), "Trace Internal");
+                        this.AddButtonLabeled(220, 300, this.GetButtonID(3, 609), "Trace Expanded");
+
+                        this.AddButtonLabeled(20, 330, this.GetButtonID(3, 610), "Toggle Profiles");
+
+                        goto case AdminGumpPage.Administer;
+                    }
                 case AdminGumpPage.Administer_Commands:
                     {
                         this.AddHtml(10, 125, 400, 20, this.Color(this.Center("Commands"), LabelColor32), false, false);
@@ -530,10 +541,11 @@ namespace Server.Gumps
                     }
                 case AdminGumpPage.Administer:
                     {
-                        this.AddPageButton(200, 20, this.GetButtonID(3, 0), "World Building", AdminGumpPage.Administer_WorldBuilding);
-                        this.AddPageButton(200, 40, this.GetButtonID(3, 1), "Server", AdminGumpPage.Administer_Server);
-                        this.AddPageButton(200, 60, this.GetButtonID(3, 2), "Access", AdminGumpPage.Administer_Access, AdminGumpPage.Administer_Access_Lockdown);
-                        this.AddPageButton(200, 80, this.GetButtonID(3, 3), "Commands", AdminGumpPage.Administer_Commands);
+                        this.AddPageButton(200, 10, this.GetButtonID(3, 0), "World Building", AdminGumpPage.Administer_WorldBuilding);
+                        this.AddPageButton(200, 30, this.GetButtonID(3, 1), "Server", AdminGumpPage.Administer_Server);
+                        this.AddPageButton(200, 50, this.GetButtonID(3, 2), "Access", AdminGumpPage.Administer_Access, AdminGumpPage.Administer_Access_Lockdown);
+                        this.AddPageButton(200, 70, this.GetButtonID(3, 3), "Commands", AdminGumpPage.Administer_Commands);
+                        this.AddPageButton(200, 90, this.GetButtonID(3, 4), "Maintenance", AdminGumpPage.Administer_Maintenance);
 
                         break;
                     }
@@ -1779,7 +1791,9 @@ namespace Server.Gumps
                         string notice = null;
                         AdminGumpPage page = AdminGumpPage.Administer;
 
-                        if (index >= 500)
+			if (index >= 600)
+			    page = AdminGumpPage.Administer_Maintenance;
+			else if (index >= 500)
                             page = AdminGumpPage.Administer_Access_Lockdown;
                         else if (index >= 400)
                             page = AdminGumpPage.Administer_Commands;
@@ -1804,37 +1818,20 @@ namespace Server.Gumps
                             case 3:
                                 page = AdminGumpPage.Administer_Commands;
                                 break;
-                            case 100:
-                                this.InvokeCommand("DocGen");
-                                notice = "Documentation has been generated.";
-                                break;
+			    case 4:
+				page = AdminGumpPage.Administer_Maintenance;
+				break;
                             case 101:
-                                this.InvokeCommand("TelGen");
-                                notice = "Teleporters have been generated.";
+                                this.InvokeCommand("CreateWorld nogump");
+                                notice = "The world has been created.";
                                 break;
                             case 102:
-                                this.InvokeCommand("MoonGen");
-                                notice = "Moongates have been generated.";
+                                this.InvokeCommand("DeleteWorld nogump");
+                                notice = "The world has been deleted.";
                                 break;
                             case 103:
-                                this.InvokeCommand("UOAMVendors");
-                                notice = "Vendor spawners have been generated.";
-                                break;
-                            case 104:
-                                this.InvokeCommand("DoorGen");
-                                notice = "Doors have been generated.";
-                                break;
-                            case 105:
-                                this.InvokeCommand("SignGen");
-                                notice = "Signs have been generated.";
-                                break;
-                            case 106:
-                                this.InvokeCommand("Decorate");
-                                notice = "Decoration has been generated.";
-                                break;
-                            case 107:
-                                this.InvokeCommand("RebuildCategorization");
-                                notice = "Categorization menu has been regenerated. The server should be restarted.";
+                                this.InvokeCommand("RecreateWorld nogump");
+                                notice = "The world has been recreated.";
                                 break;
                             case 110:
                                 this.InvokeCommand("Freeze");
@@ -1844,40 +1841,6 @@ namespace Server.Gumps
                                 this.InvokeCommand("Unfreeze");
                                 notice = "Target bounding points.";
                                 break;
-                                // + Sender
-                            case 131:
-                                this.InvokeCommand("TelGenDelete");
-                                notice = "Teleporters have been deleted.";
-                                break;
-                            case 132:
-                                this.InvokeCommand("MoonGenDelete");
-                                notice = "Moongates have been deleted.";
-                                break;
-                            case 133:
-                                this.InvokeCommand("UOAMVendorsDelete");
-                                notice = "Vendor spawners have been deleted.";
-                                break;
-                            case 134:
-                                this.InvokeCommand("DoorGenDelete");
-                                notice = "Doors have been deleted.";
-                                break;
-                            case 135:
-                                this.InvokeCommand("SignGenDelete");
-                                notice = "Signs have been deleted.";
-                                break;
-                            case 136:
-                                this.InvokeCommand("DecorateDelete");
-                                notice = "Decoration has been deleted.";
-                                break;
-                            case 137:
-                                this.InvokeCommand("DecorateML");
-                                notice = "Mondain's Legacy has been Generated.";
-                                break;
-                            case 138:
-                                this.InvokeCommand("DecorateMLDelete");
-                                notice = "Mondain's Legacy has been removed.";
-                                break;
-                                // - Sender
                             case 200:
                                 this.InvokeCommand("Save");
                                 notice = "The world has been saved.";
@@ -2124,7 +2087,51 @@ namespace Server.Gumps
                                     }
 
                                     break;
-                                }
+				}
+			    case 600:
+                                this.InvokeCommand("RebuildCategorization");
+                                notice = "Categorization menu has been regenerated. The server should be restarted.";
+                                break;
+                            case 601:
+                                this.InvokeCommand("DocGen");
+                                notice = "Documentation has been generated.";
+                                break;
+			    case 602:
+                                this.InvokeCommand("GenBounds");
+                                notice = "Bounds.bin rebuild. Restart server to take effect.";
+                                break;
+			    case 603:
+                                this.InvokeCommand("GenReports");
+                                notice = "Reports generated.";
+                                break;
+		            case 604:
+                                this.InvokeCommand("DumpTimers");
+                                notice = "Timers dumped.";
+                                break;
+			    case 605:
+                                this.InvokeCommand("CountObjects");
+                                notice = "Objects counted.";
+                                break;
+			    case 606:
+                                this.InvokeCommand("ProfileWorld");
+                                notice = "World profiled.";
+                                break;
+			    case 607:
+                                this.InvokeCommand("WriteProfiles");
+                                notice = "Profiles written.";
+                                break;
+			    case 608:
+                                this.InvokeCommand("TraceInternal");
+                                notice = "Tracing completed.";
+                                break;
+			    case 609:
+                                this.InvokeCommand("TraceExpanded");
+                                notice = "Tracing completed.";
+                                break;
+			    case 610:
+                                this.InvokeCommand("SetProfiles");
+                                notice = "Profiles toggled. Use with caution. This increases server load.";
+                                break;	
                         }
 
                         from.SendGump(new AdminGump(from, page, 0, null, notice, null));

@@ -35,6 +35,29 @@ namespace Server.Factions
                     new TextDefinition(1005187, "Members of the Council of Mages will now be ignored."),
                     new TextDefinition(1005188, "Members of the Council of Mages will now be warned to leave."),
                     new TextDefinition(1005189, "Members of the Council of Mages will now be beaten with a stick."),
+                    Settings.NewCoMLocation ?
+                    // New CoM Location
+                    new StrongholdDefinition(
+                        new Rectangle2D[]
+                        {
+                            new Rectangle2D( 4463, 1488, 16, 31 ),
+                            new Rectangle2D( 4445, 1519, 47, 55 )
+                        },
+                        new Point3D(4469, 1486, 0),
+                        new Point3D(4457, 1544, 0),
+                        new Point3D[]
+                        {
+                            new Point3D( 4464, 1534, 21 ),
+                            new Point3D( 4464, 1536, 21 ),
+                            new Point3D( 4466, 1534, 21 ),
+                            new Point3D( 4466, 1536, 21 ),
+                            new Point3D( 4468, 1534, 21 ),
+                            new Point3D( 4468, 1536, 21 ),
+                            new Point3D( 4470, 1534, 21 ),
+                            new Point3D( 4470, 1536, 21 )
+                        },
+                        new Point3D(4458, 1544, 0))
+                    : // Old CoM Location
                     new StrongholdDefinition(
                         new Rectangle2D[]
                         {
@@ -55,7 +78,8 @@ namespace Server.Factions
                             new Point3D(3797, 2252, 20),
                             new Point3D(3797, 2249, 20),
                             new Point3D(3797, 2246, 20)
-                        }),
+                        },
+                        new Point3D(3796, 2259, 20)),
                     new RankDefinition[]
                     {
                         new RankDefinition(10, 991, 8, new TextDefinition(1060789, "Inquisitor of the Council")),

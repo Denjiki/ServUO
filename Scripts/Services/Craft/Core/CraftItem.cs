@@ -1,9 +1,3 @@
-#region Header
-// **********
-// ServUO - CraftItem.cs
-// **********
-#endregion
-
 #region References
 using System;
 using System.Collections.Generic;
@@ -33,36 +27,30 @@ namespace Server.Engines.Craft
 			Mobile from,
 			CraftSystem craftSystem,
 			Type typeRes,
-			BaseTool tool,
+            ITool tool,
 			CraftItem craftItem,
 			int resHue);
 	}
 
 	public class CraftItem
 	{
-		#region Mondain's Legacy
-		/*public static void Initialize()
-		{
-			CraftSystem sys;
+        /// <summary>
+        /// this delegate will handle all crafting functions, 
+        /// such as resource check, actual crafting, etc. 
+        /// For use for abnormal crafting, ie combine cloth, etc.
+        /// </summary>
+        public Action<Mobile, CraftItem, ITool> TryCraft { get; set; }
 
-			sys = DefAlchemy.CraftSystem;
-			sys = DefBlacksmithy.CraftSystem;
-			sys = DefBowFletching.CraftSystem;
-			sys = DefCarpentry.CraftSystem;
-			sys = DefCartography.CraftSystem;
-			sys = DefCooking.CraftSystem;
-			sys = DefGlassblowing.CraftSystem;
-			sys = DefInscription.CraftSystem;
-			sys = DefMasonry.CraftSystem;
-			sys = DefTailoring.CraftSystem;
-			sys = DefTinkering.CraftSystem;
-			sys = DefBasketweaving.CraftSystem;
-		}*/
-		#endregion
+        /// <summary>
+        /// this func will create complex items that may require args, or other
+        /// things to create that Activator may not be able to accomidate.
+        /// </summary>
+        public Func<Mobile, CraftItem, ITool, Item> CreateItem { get; set; }
 
 		private readonly CraftResCol m_arCraftRes;
 		private readonly CraftSkillCol m_arCraftSkill;
 		private readonly Type m_Type;
+        public double MinSkillOffset { get; set; }
 
 		private readonly string m_GroupNameString;
 		private readonly int m_GroupNameNumber;
@@ -75,16 +63,43 @@ namespace Server.Engines.Craft
 		private bool m_NeedHeat;
 		private bool m_NeedOven;
 		private bool m_NeedMill;
+        private bool m_NeedMaker;
 
-		private bool m_UseSubRes2;
+        private bool m_UseSubRes2;
 
 		private bool m_ForceNonExceptional;
 
 		public bool ForceNonExceptional { get { return m_ForceNonExceptional; } set { m_ForceNonExceptional = value; } }
 
 		public Expansion RequiredExpansion { get; set; }
+        public ThemePack RequiredThemePack { get; set; }
 
-		private Recipe m_Recipe;
+        #region SA
+        public bool RequiresBasketWeaving { get; set; }
+        public bool RequiresResTarget { get; set; }
+        public bool RequiresMechanicalLife { get; set; }
+        #endregion
+
+        #region TOL
+        private object m_Data;
+        private int m_DisplayID;
+
+        public object Data
+        {
+            get { return m_Data; }
+            set { m_Data = value; }
+        }
+
+        public int DisplayID
+        {
+            get { return m_DisplayID; }
+            set { m_DisplayID = value; }
+        }
+        #endregion
+
+        public Func<Mobile, ConsumeType, int> ConsumeResCallback { get; set; }
+
+        private Recipe m_Recipe;
 
 		public Recipe Recipe { get { return m_Recipe; } }
 
@@ -141,11 +156,13 @@ namespace Server.Engines.Craft
 				{
 					itemId = 0x2DEA;
 				}
-				else if (type == typeof(ElvenWashBasinSouthDeed))
+				else if (type == typeof(ElvenWashBasinSouthDeed) ||
+					type == typeof(ElvenWashBasinSouthAddonWithDrawer))
 				{
 					itemId = 0x2D0B;
 				}
-				else if (type == typeof(ElvenWashBasinEastDeed))
+				else if (type == typeof(ElvenWashBasinEastDeed) ||
+					type == typeof(ElvenWashBasinEastAddonWithDrawer))
 				{
 					itemId = 0x2D0C;
 				}
@@ -234,9 +251,11 @@ namespace Server.Engines.Craft
 		public int Stam { get; set; }
 		public bool UseSubRes2 { get { return m_UseSubRes2; } set { m_UseSubRes2 = value; } }
 		public bool UseAllRes { get; set; }
+		public bool ForceTypeRes { get; set; }
 		public bool NeedHeat { get { return m_NeedHeat; } set { m_NeedHeat = value; } }
 		public bool NeedOven { get { return m_NeedOven; } set { m_NeedOven = value; } }
-		public bool NeedMill { get { return m_NeedMill; } set { m_NeedMill = value; } }
+        public bool NeedMaker { get { return m_NeedMaker; } set { m_NeedMaker = value; } }
+        public bool NeedMill { get { return m_NeedMill; } set { m_NeedMill = value; } }
 		public Type ItemType { get { return m_Type; } }
 		public int ItemHue { get; set; }
 		public string GroupNameString { get { return m_GroupNameString; } }
@@ -262,15 +281,38 @@ namespace Server.Engines.Craft
 				consumHits = consume;
 			}
 
-			if (Mana > 0 && from.Mana < Mana)
+			if (Mana > 0)
 			{
-				message = "You lack the required mana to make that.";
-				return false;
+                if (from.Backpack != null && m_System is DefInscription)
+                {
+                    Item item = from.Backpack.FindItemByType(typeof(ChronicleOfTheGargoyleQueen1));
+
+                    if (item != null && item is ChronicleOfTheGargoyleQueen1 && ((ChronicleOfTheGargoyleQueen1)item).Charges > 0)
+                    {
+                        if (consume)
+                            ((ChronicleOfTheGargoyleQueen1)item).Charges--;
+                        return true;
+                    }
+                }
+
+                if (ManaPhasingOrb.IsInManaPhase(from))
+                {
+                    if (consume)
+                        ManaPhasingOrb.RemoveFromTable(from);
+                    return true;
+                }
+
+                if (from.Mana < Mana)
+                {
+                    message = "You lack the required mana to make that.";
+                    return false;
+                }
+				else
+				{
+					consumMana = consume;
+				}
 			}
-			else
-			{
-				consumMana = consume;
-			}
+
 
 			if (Stam > 0 && from.Stam < Stam)
 			{
@@ -324,7 +366,12 @@ namespace Server.Engines.Craft
 			0x2DDB, 0x2DDC //Elven stove
 		};
 
-		private static readonly int[] m_Mills = new[]
+        private static readonly int[] m_Makers = new[]
+        {
+            0x9A96, // steam powered beverage maker
+        };
+
+        private static readonly int[] m_Mills = new[]
 		{
 			0x1920, 0x1921, 0x1922, 0x1923, 0x1924, 0x1295, 0x1926, 0x1928, 0x192C, 0x192D, 0x192E, 0x129F, 0x1930, 0x1931,
 			0x1932, 0x1934
@@ -332,16 +379,26 @@ namespace Server.Engines.Craft
 
 		private static readonly Type[][] m_TypesTable = new[]
 		{
-			new[] {typeof(Board), typeof(Log)}, new[] {typeof(HeartwoodBoard), typeof(HeartwoodLog)},
-			new[] {typeof(BloodwoodBoard), typeof(BloodwoodLog)}, new[] {typeof(FrostwoodBoard), typeof(FrostwoodLog)},
-			new[] {typeof(OakBoard), typeof(OakLog)}, new[] {typeof(AshBoard), typeof(AshLog)},
-			new[] {typeof(YewBoard), typeof(YewLog)}, new[] {typeof(Leather), typeof(Hides)},
-			new[] {typeof(SpinedLeather), typeof(SpinedHides)}, new[] {typeof(HornedLeather), typeof(HornedHides)},
-			new[] {typeof(BarbedLeather), typeof(BarbedHides)}, new[] {typeof(BlankMap), typeof(BlankScroll)},
-			new[] {typeof(Cloth), typeof(UncutCloth), typeof(AbyssalCloth)}, new[] {typeof(CheeseWheel), typeof(CheeseWedge)},
-			new[] {typeof(Pumpkin), typeof(SmallPumpkin)}, new[] {typeof(WoodenBowlOfPeas), typeof(PewterBowlOfPeas)},
+			new[] {typeof(Board), typeof(Log)}, 
+            new[] {typeof(HeartwoodBoard), typeof(HeartwoodLog)},
+			new[] {typeof(BloodwoodBoard), typeof(BloodwoodLog)}, 
+            new[] {typeof(FrostwoodBoard), typeof(FrostwoodLog)},
+			new[] {typeof(OakBoard), typeof(OakLog)}, 
+            new[] {typeof(AshBoard), typeof(AshLog)},
+			new[] {typeof(YewBoard), typeof(YewLog)}, 
+            new[] {typeof(Leather), typeof(Hides)},
+			new[] {typeof(SpinedLeather), typeof(SpinedHides)}, 
+            new[] {typeof(HornedLeather), typeof(HornedHides)},
+			new[] {typeof(BarbedLeather), typeof(BarbedHides)}, 
+            new[] {typeof(BlankMap), typeof(BlankScroll)},
+			new[] {typeof(Cloth), typeof(UncutCloth), typeof(AbyssalCloth)},
+            new[] {typeof(CheeseWheel), typeof(CheeseWedge)},
+			new[] {typeof(Pumpkin), typeof(SmallPumpkin)}, 
+            new[] {typeof(WoodenBowlOfPeas), typeof(PewterBowlOfPeas)},
             new[] { typeof( CrystallineFragments ), typeof( BrokenCrystals ), typeof( ShatteredCrystals ), typeof( ScatteredCrystals ), typeof( CrushedCrystals ), typeof( JaggedCrystals ), typeof( AncientPotteryFragments ) },
-            new[] { typeof( RedScales ), typeof( BlueScales ), typeof( BlackScales ), typeof( YellowScales ), typeof( GreenScales ), typeof( WhiteScales ), typeof( MedusaDarkScales ), typeof( MedusaLightScales ) }
+            new[] { typeof( MedusaDarkScales ), typeof( MedusaLightScales ), typeof( RedScales ), typeof( BlueScales ), typeof( BlackScales ), typeof( YellowScales ), typeof( GreenScales ), typeof( WhiteScales ) },
+            new[] { typeof(Sausage), typeof(CookableSausage) },
+            new[] { typeof(Lettuce), typeof(FarmableLettuce) }
 		};
 
 		private static readonly Type[] m_ColoredItemTable = new[]
@@ -358,6 +415,15 @@ namespace Server.Engines.Craft
             typeof(MedusaLightScales), typeof(MedusaDarkScales)
             #endregion
 		};
+
+        private static readonly Type[] m_ClothColoredItemTable = new[]
+        {
+            typeof( GozaMatSouthDeed ), typeof( GozaMatEastDeed ),
+			typeof( SquareGozaMatSouthDeed ), typeof( SquareGozaMatEastDeed ),
+			typeof( BrocadeGozaMatSouthDeed ), typeof( BrocadeGozaMatEastDeed ),
+			typeof( BrocadeSquareGozaMatSouthDeed ), typeof( BrocadeSquareGozaMatEastDeed ),
+            typeof( Tessen )
+        };
 
 		private static readonly Type[] m_ColoredResourceTable = new[]
 		{
@@ -379,13 +445,35 @@ namespace Server.Engines.Craft
 
 			typeof(BaseArmor), typeof(BaseWeapon), typeof(BaseClothing), typeof(BaseInstrument), typeof(BaseTool),
 			typeof(BaseHarvestTool), typeof(BaseQuiver), typeof(DragonBardingDeed), typeof(Fukiya), typeof(FukiyaDarts),
-			typeof(Shuriken), typeof(Spellbook), typeof(Runebook), typeof(ShortMusicStand), typeof(TallMusicStand),
-			typeof(RedHangingLantern), typeof(WhiteHangingLantern), typeof(BambooScreen), typeof(ShojiScreen), typeof(Easle),
+			typeof(Shuriken), typeof(Spellbook), typeof(Runebook), typeof(ShortMusicStandLeft), typeof(ShortMusicStandRight),
+            typeof(TallMusicStandLeft), typeof(TallMusicStandRight), typeof(EasleNorth), typeof(EasleEast), typeof(EasleSouth),
+            typeof(RedHangingLantern), typeof(WhiteHangingLantern), typeof(BambooScreen), typeof(ShojiScreen),
 			typeof(FishingPole), typeof(Stool), typeof(FootStool), typeof(WoodenBench), typeof(WoodenThrone), typeof(Throne),
 			typeof(BambooChair), typeof(WoodenChair), typeof(FancyWoodenChairCushion), typeof(WoodenChairCushion),
 			typeof(Nightstand), typeof(LargeTable), typeof(WritingTable), typeof(YewWoodTable), typeof(PlainLowTable),
-			typeof(ElegantLowTable), typeof(Dressform), typeof(BasePlayerBB), typeof(BaseContainer), typeof(BarrelStaves),
-			typeof(BarrelLid)
+			typeof(ElegantLowTable), typeof(DressformFront), typeof(DressformSide), typeof(BasePlayerBB), typeof(BarrelStaves),
+			typeof(BarrelLid), typeof(Clippers), typeof(Scissors),
+
+            typeof(KeyRing), typeof(Key), typeof(Globe), typeof(Spyglass), typeof(Lantern), typeof(Candelabra), typeof(Scales), typeof(BroadcastCrystal), typeof(TerMurStyleCandelabra),
+            typeof(BaseUtensil), typeof(BaseBeverage), 
+            
+            typeof(FruitBowl), typeof(SackFlour), typeof(Dough), typeof(SweetDough), typeof(CocoaButter), typeof(CocoaLiquor),
+            typeof(Food)
+		};
+
+		private static readonly Dictionary<Type, Type> m_ResourceConversionTable = new Dictionary<Type, Type>()
+		{
+			{ typeof(Board), typeof(Log) },
+			{ typeof(HeartwoodBoard), typeof(HeartwoodLog) },
+			{ typeof(BloodwoodBoard), typeof(BloodwoodLog) },
+			{ typeof(FrostwoodBoard), typeof(FrostwoodLog) },
+			{ typeof(OakBoard), typeof(OakLog) },
+			{ typeof(AshBoard), typeof(AshLog) },
+			{ typeof(YewBoard), typeof(YewLog) },
+			{ typeof(Leather), typeof(Hides) },
+			{ typeof(SpinedLeather), typeof(SpinedHides) },
+			{ typeof(HornedLeather), typeof(HornedHides) },
+			{ typeof(BarbedLeather), typeof(BarbedHides) },
 		};
 
 		private static Type[] m_NeverColorTable = new[] {typeof(OrcHelm)};
@@ -442,6 +530,19 @@ namespace Server.Engines.Craft
 
 			return (inItemTable && inResourceTable);
 		}
+
+        public bool RetainsColorFromCloth(Item item)
+        {
+            Type t = item.GetType();
+
+            foreach (var type in m_ClothColoredItemTable)
+            {
+                if (type == t)
+                    return true;
+            }
+
+            return false;
+        }
 
 		public bool Find(Mobile from, int[] itemIDs)
 		{
@@ -519,6 +620,97 @@ namespace Server.Engines.Craft
 
 			return false;
 		}
+
+        #region SA
+        public bool IsPlantHueType(Type[][] types)
+        {
+            for (int i = 0; i < types.Length; ++i)
+            {
+                Type[] check = types[i];
+
+                for (int j = 0; j < check.Length; ++j)
+                {
+                    if (typeof(IPlantHue).IsAssignableFrom(check[j]))
+                        return true;
+                    else if (typeof(IPigmentHue).IsAssignableFrom(check[j]))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        public int ConsumeQuantityByPlantHue(Mobile from, CraftSystem craftSystem, Container cont, Type[][] types, int[] amounts)
+        {
+            if (types.Length != amounts.Length)
+                throw new ArgumentException();
+
+            CraftContext context = craftSystem.GetContext(from);
+
+            if (context == null)
+                return 0;
+
+            Item[][] items = new Item[types.Length][];
+            int[] totals = new int[types.Length];
+
+            for (int i = 0; i < types.Length; ++i)
+            {
+                items[i] = cont.FindItemsByType(types[i], true);
+
+                for (int j = 0; j < items[i].Length; ++j)
+                {
+                    IPlantHue plantHue = items[i][j] as IPlantHue;
+                    IPigmentHue pigmentHue = items[i][j] as IPigmentHue;
+
+                    if (plantHue != null && plantHue.PlantHue != context.RequiredPlantHue)
+                        continue;
+                    else if (pigmentHue != null && pigmentHue.PigmentHue != context.RequiredPigmentHue)
+                        continue;
+
+                    totals[i] += items[i][j].Amount;
+                }
+
+                if (totals[i] < amounts[i])
+                    return i;
+            }
+
+            for (int i = 0; i < types.Length; ++i)
+            {
+                int need = amounts[i];
+
+                for (int j = 0; j < items[i].Length; ++j)
+                {
+                    Item item = items[i][j];
+                    IPlantHue ph = item as IPlantHue;
+                    IPigmentHue pigh = item as IPigmentHue;
+
+                    int theirAmount = item.Amount;
+
+                    if (ph != null && ph.PlantHue != context.RequiredPlantHue)
+                        continue;
+                    else if (pigh != null && pigh.PigmentHue != context.RequiredPigmentHue)
+                        continue;
+
+                    if (theirAmount < need)
+                    {
+                        OnResourceConsumed(item, theirAmount);
+
+                        item.Delete();
+                        need -= theirAmount;
+                    }
+                    else
+                    {
+                        OnResourceConsumed(item, need);
+
+                        item.Consume(need);
+                        break;
+                    }
+                }
+            }
+
+            return -1;
+        }
+        #endregion
 
 		public int ConsumeQuantity(Container cont, Type[][] types, int[] amounts)
 		{
@@ -637,6 +829,31 @@ namespace Server.Engines.Craft
 			return amount;
 		}
 
+        #region SA
+        public int GetPlantHueAmount(Mobile from, CraftSystem craftSystem, Container cont, Type[] types)
+        {
+            Item[] items = cont.FindItemsByType(types, true);
+            CraftContext context = craftSystem.GetContext(from);
+
+            int amount = 0;
+
+            for (int i = 0; i < items.Length; ++i)
+            {
+                IPlantHue ph = items[i] as IPlantHue;
+                IPigmentHue pigh = items[i] as IPigmentHue;
+
+                if (context == null || (ph != null && ph.PlantHue != context.RequiredPlantHue))
+                    continue;
+                else if (context == null || (pigh != null && pigh.PigmentHue != context.RequiredPigmentHue))
+                    continue;
+
+                amount += items[i].Amount;
+            }
+
+            return amount;
+        }
+        #endregion
+
 		public bool ConsumeRes(
 			Mobile from,
 			Type typeRes,
@@ -666,6 +883,17 @@ namespace Server.Engines.Craft
 				return false;
 			}
 
+            if (ConsumeResCallback != null)
+            {
+                int resMessage = ConsumeResCallback(from, consumeType);
+
+                if (resMessage > 0)
+                {
+                    message = resMessage;
+                    return false;
+                }
+            }
+
 			if (m_NeedHeat && !Find(from, m_HeatSources))
 			{
 				message = 1044487; // You must be near a fire source to cook.
@@ -678,7 +906,13 @@ namespace Server.Engines.Craft
 				return false;
 			}
 
-			if (m_NeedMill && !Find(from, m_Mills))
+            if (m_NeedMaker && !Find(from, m_Makers))
+            {
+                message = 1155732; // You must be near a steam powered beverage maker to do that.
+                return false;
+            }
+
+            if (m_NeedMill && !Find(from, m_Mills))
 			{
 				message = 1044491; // You must be near a flour mill to do that.
 				return false;
@@ -690,11 +924,19 @@ namespace Server.Engines.Craft
 			maxAmount = int.MaxValue;
 
 			CraftSubResCol resCol = (m_UseSubRes2 ? craftSystem.CraftSubRes2 : craftSystem.CraftSubRes);
+            MasterCraftsmanTalisman talisman = null;
 
 			for (int i = 0; i < types.Length; ++i)
 			{
 				CraftRes craftRes = m_arCraftRes.GetAt(i);
 				Type baseType = craftRes.ItemType;
+
+				if (typeRes != null && ForceTypeRes)
+				{
+					Type outType;
+					if (m_ResourceConversionTable.TryGetValue(typeRes, out outType))
+						baseType = outType;
+				}
 
 				// Resource Mutation
 				if ((baseType == resCol.ResType) && (typeRes != null))
@@ -758,11 +1000,16 @@ namespace Server.Engines.Craft
 				}
 				// ****************************
 
-				if (isFailure && !craftSystem.ConsumeOnFailure(from, types[i][0], this))
+                if (isFailure && (talisman != null || !craftSystem.ConsumeOnFailure(from, types[i][0], this, ref talisman)))
 				{
 					amounts[i] = 0;
 				}
 			}
+
+            if (talisman != null)
+            {
+                talisman.Charges--;
+            }
 
 			// We adjust the amount of each resource to consume the max posible
 			if (UseAllRes)
@@ -815,10 +1062,14 @@ namespace Server.Engines.Craft
 				{
 					index = ConsumeQuantity(ourPack, types, amounts);
 				}
-				else
-				{
-					index = ourPack.ConsumeTotalGrouped(types, amounts, true, OnResourceConsumed, CheckHueGrouping);
-				}
+                else if (IsPlantHueType(types))
+                {
+                    index = ConsumeQuantityByPlantHue(from, craftSystem, ourPack, types, amounts);
+                }
+                else
+                {
+                    index = ourPack.ConsumeTotalGrouped(types, amounts, true, OnResourceConsumed, CheckHueGrouping);
+                }
 
 				resHue = m_ResHue;
 			}
@@ -843,10 +1094,14 @@ namespace Server.Engines.Craft
 				{
 					index = ConsumeQuantity(ourPack, types, amounts);
 				}
-				else
-				{
-					index = ourPack.ConsumeTotalGrouped(types, amounts, true, OnResourceConsumed, CheckHueGrouping);
-				}
+                else if (IsPlantHueType(types))
+                {
+                    index = ConsumeQuantityByPlantHue(from, craftSystem, ourPack, types, amounts);
+                }
+                else
+                {
+                    index = ourPack.ConsumeTotalGrouped(types, amounts, true, OnResourceConsumed, CheckHueGrouping);
+                }
 
 				resHue = m_ResHue;
 			}
@@ -866,6 +1121,19 @@ namespace Server.Engines.Craft
 						}
 					}
 				}
+                else if (IsPlantHueType(types))
+                {
+                    CraftContext c = craftSystem.GetContext(from);
+
+                    for (int i = 0; i < types.Length; i++)
+                    {
+                        if (GetPlantHueAmount(from, craftSystem, ourPack, types[i]) < amounts[i])
+                        {
+                            index = i;
+                            break;
+                        }
+                    }
+                }
 				else
 				{
 					for (int i = 0; i < types.Length; i++)
@@ -913,40 +1181,26 @@ namespace Server.Engines.Craft
 		}
 
 		private int m_ResHue;
+        private int m_ClothHue;
 		private int m_ResAmount;
 		private CraftSystem m_System;
 
 		#region Plant Pigments
-		private PlantHue m_PlantHue = PlantHue.Plain;
-		private PlantPigmentHue m_PlantPigmentHue = PlantPigmentHue.Plain;
+		private PlantHue m_PlantHue = PlantHue.None;
+		private PlantPigmentHue m_PlantPigmentHue = PlantPigmentHue.None;
 		#endregion
 
 		private void OnResourceConsumed(Item item, int amount)
 		{
 			#region Plant Pigments
-			if (item is PlantClippings)
-			{
-				m_PlantHue = ((PlantClippings)item).PlantHue;
-				m_ResHue = item.Hue;
-			}
-
-			if (item is PlantPigment)
-			{
-				m_PlantPigmentHue = ((PlantPigment)item).PigmentHue;
-				m_ResHue = item.Hue;
-			}
-
-			if (item is DryReeds)
-			{
-				m_PlantHue = ((DryReeds)item).PlantHue;
-				m_ResHue = item.Hue;
-			}
-
-			if (item is SoftenedReeds)
-			{
-				m_PlantHue = ((SoftenedReeds)item).PlantHue;
-				m_ResHue = item.Hue;
-			}
+            if (item is IPlantHue)
+            {
+                m_PlantHue = ((IPlantHue)item).PlantHue;
+            }
+            else if (item is IPigmentHue)
+            {
+                m_PlantPigmentHue = ((IPigmentHue)item).PigmentHue;
+            }
 			#endregion
 
             if (!RetainsColorFrom(m_System, item.GetType()))
@@ -954,7 +1208,12 @@ namespace Server.Engines.Craft
 				return;
 			}
 
-			if (amount >= m_ResAmount)
+            if (item is Cloth || item is UncutCloth || item is AbyssalCloth)
+            {
+                m_ClothHue = item.Hue;
+            }
+
+            if (amount >= m_ResAmount)
 			{
 				m_ResHue = item.Hue;
 				m_ResAmount = amount;
@@ -979,12 +1238,23 @@ namespace Server.Engines.Craft
 			{
 				BaseTalisman talisman = (BaseTalisman)from.Talisman;
 
-				if (talisman.Skill == system.MainSkill)
+				if (talisman.CheckSkill(system))
 				{
-					chance -= talisman.SuccessBonus / 100.0;
 					bonus = talisman.ExceptionalBonus / 100.0;
 				}
 			}
+
+            MasterChefsApron apron = from.FindItemOnLayer(Layer.MiddleTorso) as MasterChefsApron;
+
+            if (apron != null)
+            {
+                bonus += apron.Bonus / 100.0;
+            }
+
+            if (WoodworkersBench.HasBonus(from, system.MainSkill))
+            {
+                bonus += .3;
+            }
 
 			switch (system.ECA)
 			{
@@ -1053,7 +1323,7 @@ namespace Server.Engines.Craft
 			{
 				CraftSkill craftSkill = m_arCraftSkill.GetAt(i);
 
-				double minSkill = craftSkill.MinSkill;
+				double minSkill = craftSkill.MinSkill - MinSkillOffset;
 				double maxSkill = craftSkill.MaxSkill;
 				double valSkill = from.Skills[craftSkill.SkillToMake].Value;
 
@@ -1091,11 +1361,16 @@ namespace Server.Engines.Craft
 			{
 				BaseTalisman talisman = (BaseTalisman)from.Talisman;
 
-				if (talisman.Skill == craftSystem.MainSkill)
+				if (talisman.CheckSkill(craftSystem))
 				{
 					chance += talisman.SuccessBonus / 100.0;
 				}
 			}
+
+            if (WoodworkersBench.HasBonus(from, craftSystem.MainSkill))
+            {
+                chance += .5;
+            }
 
 			if (allRequiredSkills && valMainSkill == maxMainSkill)
 			{
@@ -1105,7 +1380,7 @@ namespace Server.Engines.Craft
 			return chance;
 		}
 
-		public void Craft(Mobile from, CraftSystem craftSystem, Type typeRes, BaseTool tool)
+        public void Craft(Mobile from, CraftSystem craftSystem, Type typeRes, ITool tool)
 		{
 			if (from.BeginAction(typeof(CraftSystem)))
 			{
@@ -1117,59 +1392,82 @@ namespace Server.Engines.Craft
 
 					if (allRequiredSkills && chance >= 0.0)
 					{
-						if (Recipe == null || !(from is PlayerMobile) || ((PlayerMobile)from).HasRecipe(Recipe))
-						{
-							int badCraft = craftSystem.CanCraft(from, tool, m_Type);
+                        if (Recipe == null || !(from is PlayerMobile) || ((PlayerMobile)from).HasRecipe(Recipe))
+                        {
+                            if (!RequiresBasketWeaving || (from is PlayerMobile && ((PlayerMobile)from).BasketWeaving))
+                            {
+                                if (!RequiresMechanicalLife || (from is PlayerMobile && ((PlayerMobile)from).MechanicalLife))
+                                {
+                                    int badCraft = craftSystem.CanCraft(from, tool, m_Type);
 
-							if (badCraft <= 0)
-							{
-								int resHue = 0;
-								int maxAmount = 0;
-								object message = null;
+                                    if (badCraft <= 0)
+                                    {
+                                        if (RequiresResTarget && NeedsResTarget(from, craftSystem))
+                                        {
+                                            from.Target = new ChooseResTarget(from, this, craftSystem, typeRes, tool);
+                                            from.SendMessage("Choose the resource you would like to use.");
+                                            return;
+                                        }
 
-								if (ConsumeRes(from, typeRes, craftSystem, ref resHue, ref maxAmount, ConsumeType.None, ref message))
-								{
-									message = null;
+                                        int resHue = 0;
+                                        int maxAmount = 0;
+                                        object message = null;
 
-									if (ConsumeAttributes(from, ref message, false))
-									{
-										CraftContext context = craftSystem.GetContext(from);
+                                        if (ConsumeRes(from, typeRes, craftSystem, ref resHue, ref maxAmount, ConsumeType.None, ref message))
+                                        {
+                                            message = null;
 
-										if (context != null)
-										{
-											context.OnMade(this);
-										}
+                                            if (ConsumeAttributes(from, ref message, false))
+                                            {
+                                                CraftContext context = craftSystem.GetContext(from);
 
-										int iMin = craftSystem.MinCraftEffect;
-										int iMax = (craftSystem.MaxCraftEffect - iMin) + 1;
-										int iRandom = Utility.Random(iMax);
-										iRandom += iMin + 1;
-										new InternalTimer(from, craftSystem, this, typeRes, tool, iRandom).Start();
-                                        return;
-									}
-									else
-									{
-										from.EndAction(typeof(CraftSystem));
-										from.SendGump(new CraftGump(from, craftSystem, tool, message));
-									}
-								}
-								else
-								{
-									from.EndAction(typeof(CraftSystem));
-									from.SendGump(new CraftGump(from, craftSystem, tool, message));
-								}
-							}
-							else
-							{
-								from.EndAction(typeof(CraftSystem));
-								from.SendGump(new CraftGump(from, craftSystem, tool, badCraft));
-							}
-						}
-						else
-						{
-							from.EndAction(typeof(CraftSystem));
-							from.SendGump(new CraftGump(from, craftSystem, tool, 1072847)); // You must learn that recipe from a scroll.
-						}
+                                                if (context != null)
+                                                {
+                                                    context.OnMade(this);
+                                                }
+
+                                                int iMin = craftSystem.MinCraftEffect;
+                                                int iMax = (craftSystem.MaxCraftEffect - iMin) + 1;
+                                                int iRandom = Utility.Random(iMax);
+                                                iRandom += iMin + 1;
+                                                new InternalTimer(from, craftSystem, this, typeRes, tool, iRandom).Start();
+                                                return;
+                                            }
+                                            else
+                                            {
+                                                from.EndAction(typeof(CraftSystem));
+                                                from.SendGump(new CraftGump(from, craftSystem, tool, message));
+                                            }
+                                        }
+                                        else
+                                        {
+                                            from.EndAction(typeof(CraftSystem));
+                                            from.SendGump(new CraftGump(from, craftSystem, tool, message));
+                                        }
+                                    }
+                                    else
+                                    {
+                                        from.EndAction(typeof(CraftSystem));
+                                        from.SendGump(new CraftGump(from, craftSystem, tool, badCraft));
+                                    }
+                                }
+                                else
+                                {
+                                    from.EndAction(typeof(CraftSystem));
+                                    from.SendGump(new CraftGump(from, craftSystem, tool, 1113034)); // You haven't read the Mechanical Life Manual. Talking to Sutek might help!
+                                }
+                            }
+                            else
+                            {
+                                from.EndAction(typeof(CraftSystem));
+                                from.SendGump(new CraftGump(from, craftSystem, tool, 1112253)); // You haven't learned basket weaving. Perhaps studying a book would help!
+                            }
+                        }
+                        else
+                        {
+                            from.EndAction(typeof(CraftSystem));
+                            from.SendGump(new CraftGump(from, craftSystem, tool, 1072847)); // You must learn that recipe from a scroll.
+                        }
 					}
 					else
 					{
@@ -1194,27 +1492,31 @@ namespace Server.Engines.Craft
 		}
 
 		private object RequiredExpansionMessage(Expansion expansion)
-			//Eventually convert to TextDefinition, but that requires that we convert all the gumps to ues it too.  Not that it wouldn't be a bad idea.
 		{
 			switch (expansion)
 			{
-				case Expansion.SE:
-					return 1063307; // The "Samurai Empire" expansion is required to attempt this item.
-				case Expansion.ML:
-					return 1072650; // The "Mondain's Legacy" expansion is required to attempt this item.
-				default:
-					return String.Format(
-						"The \"{0}\" expansion is required to attempt this item.", ExpansionInfo.GetInfo(expansion).Name);
+                case Expansion.SE:
+                    return 1063307; // The "Samurai Empire" expansion is required to attempt this item.
+                case Expansion.ML:
+                    return 1072650; // The "Mondain's Legacy" expansion is required to attempt this item.
+                case Expansion.SA:
+                    return 1094731; // You must have the Stygian Abyss expansion pack to use this feature.
+                case Expansion.HS:
+                    return 1116295; // You must have the High Seas booster pack to use this feature
+                case Expansion.TOL:
+                    return 1155875; // You must have the Time of Legends expansion to use this feature.
+                default:
+                    return String.Format("The \"{0}\" expansion is required to attempt this item.", ExpansionInfo.GetInfo(expansion).Name);
 			}
 		}
 
-		public void CompleteCraft(
+        public void CompleteCraft(
 			int quality,
 			bool makersMark,
 			Mobile from,
 			CraftSystem craftSystem,
 			Type typeRes,
-			BaseTool tool,
+			ITool tool,
 			CustomCraft customCraft)
 		{
 			int badCraft = craftSystem.CanCraft(from, tool, m_Type);
@@ -1333,8 +1635,6 @@ namespace Server.Engines.Craft
 					return;
 				}
 
-				tool.UsesRemaining--;
-
 				if (craftSystem is DefBlacksmithy)
 				{
 					AncientSmithyHammer hammer = from.FindItemOnLayer(Layer.OneHanded) as AncientSmithyHammer;
@@ -1366,28 +1666,6 @@ namespace Server.Engines.Craft
 					}
 				}
 
-				#region Mondain's Legacy
-				if (tool is HammerOfHephaestus)
-				{
-					if (tool.UsesRemaining < 1)
-					{
-						tool.UsesRemaining = 0;
-					}
-				}
-				else
-				{
-					if (tool.UsesRemaining < 1)
-					{
-						toolBroken = true;
-					}
-
-					if (toolBroken)
-					{
-						tool.Delete();
-					}
-				}
-				#endregion
-
 				int num = 0;
 
 				Item item;
@@ -1395,15 +1673,19 @@ namespace Server.Engines.Craft
 				{
 					item = customCraft.CompleteCraft(out num);
 				}
-				else if (typeof(MapItem).IsAssignableFrom(ItemType) && from.Map != Map.Trammel && from.Map != Map.Felucca)
+				else if (!Core.SA && typeof(MapItem).IsAssignableFrom(ItemType) && from.Map != Map.Trammel && from.Map != Map.Felucca)
 				{
 					item = new IndecipherableMap();
 					from.SendLocalizedMessage(1070800); // The map you create becomes mysteriously indecipherable.
 				}
-				else
-				{
-					item = Activator.CreateInstance(ItemType) as Item;
-				}
+                else if (CreateItem != null)
+                {
+                    item = CreateItem(from, this, tool);
+                }
+                else
+                {
+                    item = Activator.CreateInstance(ItemType) as Item;
+                }
 
 				if (item != null)
 				{
@@ -1446,6 +1728,14 @@ namespace Server.Engines.Craft
 					}
 					#endregion
 
+                    #region High Seas
+                    if (Core.HS && item is MapItem)
+                        ((MapItem)item).Facet = from.Map;
+                    #endregion
+
+                    CraftContext context = craftSystem.GetContext(from);
+                    int originalHue = item.Hue;
+
 					if (item is ICraftable)
 					{
 						endquality = ((ICraftable)item).OnCraft(quality, makersMark, from, craftSystem, typeRes, tool, this, resHue);
@@ -1458,6 +1748,17 @@ namespace Server.Engines.Craft
 					{
 						item.Hue = resHue;
 					}
+
+                    if (item.Hue == 0 && RetainsColorFromCloth(item) && m_ClothHue != 0)
+                    {
+                        item.Hue = m_ClothHue;
+                    }
+
+                    // This takes into account for natural hues, ie plant hues
+                    if (item.Hue != originalHue && context.DoNotColor)
+                    {
+                        item.Hue = originalHue;
+                    }
 
 					if (maxAmount > 0)
 					{
@@ -1472,27 +1773,17 @@ namespace Server.Engines.Craft
 					}
 
 					#region Plant Pigments
-					if (item is PlantPigment && (craftSystem is DefAlchemy || craftSystem is DefCooking))
-					{
-						((PlantPigment)item).PigmentHue = PlantPigmentHueInfo.HueFromPlantHue(m_PlantHue);
-					}
-
-					if (item is NaturalDye && (craftSystem is DefAlchemy || craftSystem is DefCooking))
-					{
-						((NaturalDye)item).PigmentHue = PlantPigmentHueInfo.GetInfo(m_PlantPigmentHue).PlantPigmentHue;
-					}
-
-					if (item is SoftenedReeds && (craftSystem is DefAlchemy || craftSystem is DefCooking))
-					{
-						((SoftenedReeds)item).PlantHue = PlantHueInfo.GetInfo(m_PlantHue).PlantHue;
-					}
-
-					if (item is BaseContainer && (craftSystem is DefBasketweaving))
-					{
-						(item).Hue = PlantHueInfo.GetInfo(m_PlantHue).Hue;
-					}
-
-                    CraftContext context = craftSystem.GetContext(from);
+                    if (m_PlantHue != PlantHue.None)
+                    {
+                        if (item is IPlantHue)
+                            ((IPlantHue)item).PlantHue = m_PlantHue;
+                        else if (item is IPigmentHue)
+                            ((IPigmentHue)item).PigmentHue = PlantPigmentHueInfo.HueFromPlantHue(m_PlantHue);
+                    }
+                    else if (m_PlantPigmentHue != PlantPigmentHue.None && item is IPigmentHue)
+                    {
+                        ((IPigmentHue)item).PigmentHue = m_PlantPigmentHue;
+                    }
 
                     if (context.QuestOption == CraftQuestOption.QuestItem)
                     {
@@ -1501,9 +1792,35 @@ namespace Server.Engines.Craft
                         if (!QuestHelper.CheckItem(px, item))
                             from.SendLocalizedMessage(1072355, null, 0x23); // That item does not match any of your quest criteria	
                     }
+
+                    context.RequiredPigmentHue = PlantPigmentHue.None;
+                    context.RequiredPlantHue = PlantHue.None;
+
+                    m_PlantHue = PlantHue.None;
+                    m_PlantPigmentHue = PlantPigmentHue.None;
 					#endregion
 
-					from.AddToBackpack(item);
+                    if (tool is Item && ((Item)tool).Parent is Container)
+                    {
+                        Container cntnr = (Container)((Item)tool).Parent;
+
+                        if (!cntnr.TryDropItem(from, item, false))
+                        {
+                            if(cntnr != from.Backpack)
+                                from.AddToBackpack(item);
+                            else
+                                item.MoveToWorld(from.Location, from.Map);
+                        }
+                    }
+                    else
+                    {
+                        from.AddToBackpack(item);
+                    }
+
+                    if (tool is Item) // sanity check
+                    {
+                        EventSink.InvokeCraftSuccess(new CraftSuccessEventArgs(from, item, (Item)tool));
+                    }
 
 					if (from.IsStaff())
 					{
@@ -1514,6 +1831,30 @@ namespace Server.Engines.Craft
                     AutoCraftTimer.OnSuccessfulCraft(from);
 					//from.PlaySound( 0x57 );
 				}
+
+                tool.UsesRemaining--;
+
+                #region Mondain's Legacy
+                if (tool is HammerOfHephaestus)
+                {
+                    if (tool.UsesRemaining < 1)
+                    {
+                        tool.UsesRemaining = 0;
+                    }
+                }
+                #endregion
+                else
+                {
+                    if (tool.UsesRemaining < 1 && tool.BreakOnDepletion)
+                    {
+                        toolBroken = true;
+                    }
+
+                    if (toolBroken)
+                    {
+                        tool.Delete();
+                    }
+                }
 
 				if (num == 0)
 				{
@@ -1614,7 +1955,7 @@ namespace Server.Engines.Craft
 
 				tool.UsesRemaining--;
 
-				if (tool.UsesRemaining < 1)
+                if (tool.UsesRemaining < 1 && tool.BreakOnDepletion)
 				{
 					toolBroken = true;
 				}
@@ -1646,11 +1987,11 @@ namespace Server.Engines.Craft
 			private readonly CraftItem m_CraftItem;
 			private readonly CraftSystem m_CraftSystem;
 			private readonly Type m_TypeRes;
-			private readonly BaseTool m_Tool;
+			private readonly ITool m_Tool;
             private bool m_AutoCraft;
 
 			public InternalTimer(
-				Mobile from, CraftSystem craftSystem, CraftItem craftItem, Type typeRes, BaseTool tool, int iCountMax)
+				Mobile from, CraftSystem craftSystem, CraftItem craftItem, Type typeRes, ITool tool, int iCountMax)
 				: base(TimeSpan.Zero, TimeSpan.FromSeconds(craftSystem.Delay), iCountMax)
 			{
 				m_From = from;
@@ -1752,5 +2093,114 @@ namespace Server.Engines.Craft
 				}
 			}
 		}
+
+        #region SA
+        public static void RemoveResTarget(Mobile from)
+        {
+            if (m_HasTarget.Contains(from))
+                m_HasTarget.Remove(from);
+        }
+
+        public static void AddResTarget(Mobile from)
+        {
+            if (!m_HasTarget.Contains(from))
+                m_HasTarget.Add(from);
+        }
+
+        public static bool HasResTarget(Mobile from)
+        {
+            return m_HasTarget.Contains(from);
+        }
+
+        private static List<Mobile> m_HasTarget = new List<Mobile>();
+
+        public bool NeedsResTarget(Mobile from, CraftSystem craftSystem)
+        {
+            CraftContext context = craftSystem.GetContext(from);
+
+            if (context == null || HasResTarget(from))
+                return false;
+
+            Type[][] types = new Type[m_arCraftRes.Count][];
+            Container pack = from.Backpack;
+            PlantHue hue = PlantHue.None;
+            PlantPigmentHue phue = PlantPigmentHue.None;
+
+            for (int i = 0; i < types.Length; ++i)
+            {
+                CraftRes craftRes = m_arCraftRes.GetAt(i);
+                Type type = craftRes.ItemType;
+
+                if (pack != null)
+                {
+                    Item[] items = pack.FindItemsByType(type);
+
+                    if (items != null && items.Length > 0 && items[0] is IPlantHue)
+                        hue = ((IPlantHue)items[0]).PlantHue;
+                    else if (items != null && items.Length > 0 && items[0] is IPigmentHue)
+                        phue = ((IPigmentHue)items[0]).PigmentHue;
+
+                    foreach (Item item in items)
+                    {
+                        if (item is IPlantHue && ((IPlantHue)item).PlantHue != hue)
+                            return true;
+                        else if (item is IPigmentHue && ((IPigmentHue)item).PigmentHue != phue)
+                            return true;
+                    }
+
+                    if (hue != PlantHue.None)
+                        context.RequiredPlantHue = hue;
+                    else if (phue != PlantPigmentHue.None)
+                        context.RequiredPigmentHue = phue;
+                    
+                }
+            }
+
+            return false;
+        }
+
+        public class ChooseResTarget : Server.Targeting.Target
+        {
+            private CraftItem m_CraftItem;
+            private CraftSystem m_CraftSystem;
+            private Type m_TypeRes;
+            private ITool m_Tool;
+
+            public ChooseResTarget(Mobile from, CraftItem craftitem, CraftSystem craftSystem, Type typeRes, ITool tool)
+                : base(-1, false, Server.Targeting.TargetFlags.None)
+            {
+                m_CraftItem = craftitem;
+                m_CraftSystem = craftSystem;
+                m_TypeRes = typeRes;
+                m_Tool = tool;
+
+                CraftItem.AddResTarget(from);
+            }
+
+            protected override void OnTarget(Mobile from, object targeted)
+            {
+                CraftContext context = m_CraftSystem.GetContext(from);
+
+                if (context != null && targeted is IPlantHue)
+                    context.RequiredPlantHue = ((IPlantHue)targeted).PlantHue;
+                else if (context != null && targeted is IPigmentHue)
+                    context.RequiredPigmentHue = ((IPigmentHue)targeted).PigmentHue;
+
+                from.EndAction(typeof(CraftSystem));
+                m_CraftItem.Craft(from, m_CraftSystem, m_TypeRes, m_Tool);
+            }
+
+            protected override void OnTargetCancel(Mobile from, Server.Targeting.TargetCancelType cancelType)
+            {
+                from.EndAction(typeof(CraftSystem));
+                from.SendGump(new CraftGump(from, m_CraftSystem, m_Tool, null));
+            }
+
+            protected override void OnTargetFinish(Mobile from)
+            {
+                CraftItem.RemoveResTarget(from);
+            }
+        }
+        #endregion
 	}
 }

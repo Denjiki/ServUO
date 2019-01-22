@@ -19,12 +19,13 @@ namespace Server.Multis
         BadRegionTemp,
         InvalidCastleKeep,
         BadRegionRaffle,
-        QueensLoyalty
+        NoQueenLoyalty
     }
 
     public class HousePlacement
     {
         // Any land tile which matches one of these ID numbers is considered a road and cannot be placed over.
+        public static int[] RoadIDs { get { return m_RoadIDs; } }
         private static readonly int[] m_RoadIDs = new int[]
         {
             0x0071, 0x0078,
@@ -51,21 +52,20 @@ namespace Server.Multis
             if (from.AccessLevel >= AccessLevel.GameMaster)
                 return HousePlacementResult.Valid; // Staff can place anywhere
 
-            if (map == Map.Ilshenar || SpellHelper.IsFeluccaT2A(map, center))
-                return HousePlacementResult.BadRegion; // No houses in Ilshenar/T2A
+            if (map == Map.Ilshenar || SpellHelper.IsFeluccaT2A(map, center) || SpellHelper.IsEodon(map, center))
+                return HousePlacementResult.BadRegion; // No houses in Ilshenar/T2A/Eodon
 
             if (map == Map.Malas && (multiID == 0x007C || multiID == 0x007E))
                 return HousePlacementResult.InvalidCastleKeep;
 
             #region SA
-            if (map == Map.TerMur)
+            if (map == Map.TerMur && !Server.Engines.Points.PointsSystem.QueensLoyalty.IsNoble(from))
             {
-                if (from is PlayerMobile && ((PlayerMobile)from).Level < PlayerMobile.Noble)
-                    return HousePlacementResult.QueensLoyalty;
+                return HousePlacementResult.NoQueenLoyalty;
             }
             #endregion
 
-            NoHousingRegion noHousingRegion = (NoHousingRegion)Region.Find(center, map).GetRegion(typeof(NoHousingRegion));
+            var noHousingRegion = (NoHousingRegion)Region.Find(center, map).GetRegion(typeof(NoHousingRegion));
 
             if (noHousingRegion != null)
                 return HousePlacementResult.BadRegion;
@@ -113,13 +113,13 @@ namespace Server.Multis
 
                     if (!reg.AllowHousing(from, testPoint)) // Cannot place houses in dungeons, towns, treasure map areas etc
                     {
-                        if (reg.IsPartOf(typeof(TempNoHousingRegion)))
+                        if (reg.IsPartOf<TempNoHousingRegion>())
                             return HousePlacementResult.BadRegionTemp;
 
-                        if (reg.IsPartOf(typeof(TreasureRegion)) || reg.IsPartOf(typeof(HouseRegion)))
+                        if (reg.IsPartOf<TreasureRegion>() || reg.IsPartOf<HouseRegion>())
                             return HousePlacementResult.BadRegionHidden;
 
-                        if (reg.IsPartOf(typeof(HouseRaffleRegion)))
+                        if (reg.IsPartOf<HouseRaffleRegion>())
                             return HousePlacementResult.BadRegionRaffle;
 
                         return HousePlacementResult.BadRegion;

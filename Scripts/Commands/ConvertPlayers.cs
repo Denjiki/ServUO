@@ -10,9 +10,10 @@ namespace Server.Commands
     {
         public static void Initialize()
         {
-            CommandSystem.Register("ConvertPlayers", AccessLevel.Administrator, new CommandEventHandler(Convert_OnCommand));
+            //CommandSystem.Register("ConvertPlayers", AccessLevel.Administrator, new CommandEventHandler(Convert_OnCommand));
         }
 
+        [Obsolete("Convert_OnCommand no longer supported.", true)]
         public static void Convert_OnCommand(CommandEventArgs e)
         {
             e.Mobile.SendMessage("Converting all players to PlayerMobile.  You will be disconnected.  Please Restart the server after the world has finished saving.");
@@ -51,9 +52,9 @@ namespace Server.Commands
                 NetState.ProcessDisposedQueue();
                 World.Save();
             
-                Console.WriteLine("{0} players have been converted to PlayerMobile. {1}.", count, Core.Service ? "The server is now restarting" : "Press any key to restart the server");
+                Console.WriteLine("{0} players have been converted to PlayerMobile. {1}.", count, Core.NoConsole ? "The server is now restarting" : "Press any key to restart the server");
                 
-                if (!Core.Service)
+                if (!Core.NoConsole && !Core.Service)
                     Console.ReadKey(true);
 
                 Core.Kill(true);

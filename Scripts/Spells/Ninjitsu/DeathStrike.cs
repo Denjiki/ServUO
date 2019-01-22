@@ -107,6 +107,8 @@ namespace Server.Spells.Ninjitsu
             info.m_Timer = Timer.DelayCall(TimeSpan.FromSeconds(5.0), new TimerStateCallback(ProcessDeathStrike), defender);
 
             m_Table[defender] = info;
+            
+            BuffInfo.AddBuff(defender, new BuffInfo(BuffIcon.DeathStrike, 1075645, TimeSpan.FromSeconds(5.0), defender, String.Format("{0}", damageBonus)));
 
             this.CheckGain(attacker);
         }
@@ -151,9 +153,9 @@ namespace Server.Spells.Ninjitsu
             }
 
             if (Core.ML)
-                info.m_Target.Damage(damage, info.m_Attacker); // Damage is direct.
+                AOS.Damage(info.m_Target, info.m_Attacker, damage, 0, 0, 0, 0, 0, 0, 100); // Damage is direct.
             else
-                AOS.Damage(info.m_Target, info.m_Attacker, damage, true, 100, 0, 0, 0, 0, 0, 0, false, false, true); // Damage is physical.
+                AOS.Damage(info.m_Target, info.m_Attacker, damage, true, 100, 0, 0, 0, 0); // Damage is physical.
 
             if (info.m_Timer != null)
                 info.m_Timer.Stop();
@@ -176,6 +178,19 @@ namespace Server.Spells.Ninjitsu
                 this.m_DamageBonus = damageBonus;
                 this.m_isRanged = isRanged;
             }
+        }
+
+        public static void Initialize()
+        {
+            if (Core.SE)
+            {
+                EventSink.Movement += new MovementEventHandler(EventSink_Movement);
+            }
+        }
+
+        public static void EventSink_Movement(MovementEventArgs e)
+        {
+            AddStep(e.Mobile);
         }
     }
 }

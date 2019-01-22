@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using Server.Accounting;
 using Server.Commands;
@@ -14,19 +15,37 @@ namespace Server.Misc
     {
         None,
         Crypt,
-        NewCrypt
+        NewCrypt,
+        NewSecureCrypt
     }
 
     public class AccountHandler
     {
-        public static PasswordProtection ProtectPasswords = PasswordProtection.NewCrypt;
-        private static readonly int MaxAccountsPerIP = 1;
-        private static readonly bool AutoAccountCreation = true;
-        private static readonly bool RestrictDeletion = !TestCenter.Enabled;
-        private static readonly TimeSpan DeleteDelay = TimeSpan.FromDays(7.0);
+	    public static PasswordProtection ProtectPasswords = Config.GetEnum(
+		    "Accounts.ProtectPasswords",
+			PasswordProtection.NewSecureCrypt);
+
+        private static readonly int MaxAccountsPerIP = Config.Get("Accounts.AccountsPerIp", 1);
+        private static readonly bool AutoAccountCreation = Config.Get("Accounts.AutoCreateAccounts", true);
+        private static readonly bool RestrictDeletion = Config.Get("Accounts.RestrictDeletion", !TestCenter.Enabled);
+        private static readonly TimeSpan DeleteDelay = Config.Get("Accounts.DeleteDelay", TimeSpan.FromDays(7.0));
+
+        private static readonly CityInfo[] StartingCitiesT2A = new CityInfo[]
+        {
+            new CityInfo("New Haven",	"New Haven Bank",	1150168, 3503,	2574,	14, Map.Felucca),
+            new CityInfo("Yew", "The Empath Abbey",	1075072, 633,	858,	0, Map.Felucca),
+            new CityInfo("Minoc", "The Barnacle", 1075073, 2476,	413,	15, Map.Felucca),
+            new CityInfo("Britain",	"The Wayfarer's Inn",	1075074, 1602,	1591,	20, Map.Felucca),
+            new CityInfo("Moonglow",	"The Scholars Inn",	1075075, 4408,	1168,	0, Map.Felucca),
+            new CityInfo("Trinsic",	"The Traveler's Inn",	1075076, 1845,	2745,	0, Map.Felucca),
+            new CityInfo("Jhelom", "The Mercenary Inn",	1075078, 1374,	3826,	0, Map.Felucca),
+            new CityInfo("Skara Brae",	"The Falconer's Inn",	1075079, 618,	2234,	0, Map.Felucca),
+            new CityInfo("Vesper", "The Ironwood Inn",	1075080, 2771,	976,	0, Map.Felucca)
+        };
+
         private static readonly CityInfo[] StartingCities = new CityInfo[]
         {
-            new CityInfo("New Haven",	"New Haven Bank",	1150168, 3667,	2625,	0),
+            new CityInfo("New Haven",	"New Haven Bank",	1150168, 3503,	2574,	14),
             new CityInfo("Yew", "The Empath Abbey",	1075072, 633,	858,	0),
             new CityInfo("Minoc", "The Barnacle", 1075073, 2476,	413,	15),
             new CityInfo("Britain",	"The Wayfarer's Inn",	1075074, 1602,	1591,	20),
@@ -36,6 +55,27 @@ namespace Server.Misc
             new CityInfo("Skara Brae",	"The Falconer's Inn",	1075079, 618,	2234,	0),
             new CityInfo("Vesper", "The Ironwood Inn",	1075080, 2771,	976,	0)
         };
+
+        private static readonly CityInfo[] StartingCitiesSA = new CityInfo[]
+        {
+            new CityInfo("New Haven",	"New Haven Bank",	1150168, 3503,	2574,	14),
+            new CityInfo("Yew", "The Empath Abbey",	1075072, 633,	858,	0),
+            new CityInfo("Minoc", "The Barnacle", 1075073, 2476,	413,	15),
+            new CityInfo("Britain",	"The Wayfarer's Inn",	1075074, 1602,	1591,	20),
+            new CityInfo("Moonglow",	"The Scholars Inn",	1075075, 4408,	1168,	0),
+            new CityInfo("Trinsic",	"The Traveler's Inn",	1075076, 1845,	2745,	0),
+            new CityInfo("Jhelom", "The Mercenary Inn",	1075078, 1374,	3826,	0),
+            new CityInfo("Skara Brae",	"The Falconer's Inn",	1075079, 618,	2234,	0),
+            new CityInfo("Vesper", "The Ironwood Inn",	1075080, 2771,	976,	0),
+            new CityInfo("Royal City", "Royal City Inn", 1150169, 738, 3486, -19, Map.TerMur)
+        };
+
+        private static readonly CityInfo[] SiegeStartingCities = new CityInfo[]
+        {
+            new CityInfo("Britain",	"The Wayfarer's Inn",	1075074, 1602,	1591,	20, Map.Felucca),
+            new CityInfo("Royal City", "Royal City Inn", 1150169, 738, 3486, -19, Map.TerMur)
+        };
+
         /* Old Haven/Magincia Locations
         new CityInfo( "Britain", "Sweet Dreams Inn", 1496, 1628, 10 );
         // ..
@@ -52,13 +92,17 @@ namespace Server.Misc
         StartingCities[StartingCities.Length - 1] = haven;
         }
         */
-        private static readonly bool PasswordCommandEnabled = false;
+
+		private static readonly bool PasswordCommandEnabled = Config.Get("Accounts.PasswordCommandEnabled", false);
+
         private static readonly char[] m_ForbiddenChars = new char[]
         {
-            '<', '>', ':', '"', '/', '\\', '|', '?', '*'
+            '<', '>', ':', '"', '/', '\\', '|', '?', '*', ' '
         };
+
         private static AccessLevel m_LockdownLevel;
         private static Dictionary<IPAddress, Int32> m_IPTable;
+
         public static AccessLevel LockdownLevel
         {
             get
@@ -70,6 +114,7 @@ namespace Server.Misc
                 m_LockdownLevel = value;
             }
         }
+
         public static Dictionary<IPAddress, Int32> IPTable
         {
             get
@@ -78,21 +123,24 @@ namespace Server.Misc
                 {
                     m_IPTable = new Dictionary<IPAddress, Int32>();
 
-                    foreach (Account a in Accounts.GetAccounts())
-                        if (a.LoginIPs.Length > 0)
-                        {
-                            IPAddress ip = a.LoginIPs[0];
+	                foreach (var a in Accounts.GetAccounts().OfType<Account>())
+	                {
+		                if (a.LoginIPs.Length > 0)
+		                {
+			                IPAddress ip = a.LoginIPs[0];
 
-                            if (m_IPTable.ContainsKey(ip))
-                                m_IPTable[ip]++;
-                            else
-                                m_IPTable[ip] = 1;
-                        }
+			                if (m_IPTable.ContainsKey(ip))
+				                m_IPTable[ip]++;
+			                else
+				                m_IPTable[ip] = 1;
+		                }
+	                }
                 }
 
                 return m_IPTable;
             }
         }
+
         public static void Initialize()
         {
             EventSink.DeleteRequest += new DeleteRequestEventHandler(EventSink_DeleteRequest);
@@ -194,7 +242,7 @@ namespace Server.Misc
 
         public static bool CanCreate(IPAddress ip)
         {
-            if (!IPTable.ContainsKey(ip))
+            if (!IPTable.ContainsKey(ip) || IPLimiter.IsExempt(ip))
                 return true;
 
             return (IPTable[ip] < MaxAccountsPerIP);
@@ -202,12 +250,17 @@ namespace Server.Misc
 
         public static void EventSink_AccountLogin(AccountLoginEventArgs e)
         {
+			// If the login attempt has already been rejected by another event handler
+			// then just return
+			if (e.Accepted == false)
+				return;
+
             if (!IPLimiter.SocketBlock && !IPLimiter.Verify(e.State.Address))
             {
                 e.Accepted = false;
                 e.RejectReason = ALRReason.InUse;
 
-                Utility.PushColor(ConsoleColor.DarkRed);
+                Utility.PushColor(ConsoleColor.Red);
                 Console.WriteLine("Login: {0}: Past IP limit threshold", e.State);
                 Utility.PopColor();
 
@@ -235,7 +288,7 @@ namespace Server.Misc
                 }
                 else
                 {
-                    Utility.PushColor(ConsoleColor.DarkRed);
+                    Utility.PushColor(ConsoleColor.Red);
                     Console.WriteLine("Login: {0}: Invalid username '{1}'", e.State, un);
                     Utility.PopColor();
                     e.RejectReason = ALRReason.Invalid;
@@ -266,6 +319,7 @@ namespace Server.Misc
             {
                 Utility.PushColor(ConsoleColor.Green);
                 Console.WriteLine("Login: {0}: Valid credentials for '{1}'", e.State, un);
+                Console.WriteLine("Client Type: {0}: {1}", e.State, e.State.IsEnhancedClient ? "Enhanced Client" : "Classic Client");
                 Utility.PopColor();
                 e.State.Account = acct;
                 e.Accepted = true;
@@ -283,7 +337,7 @@ namespace Server.Misc
             {
                 e.Accepted = false;
 
-                Utility.PushColor(ConsoleColor.DarkRed);
+                Utility.PushColor(ConsoleColor.Red);
                 Console.WriteLine("Login: {0}: Past IP limit threshold", e.State);
                 Utility.PopColor();
 
@@ -332,7 +386,23 @@ namespace Server.Misc
                 Utility.PopColor();
                 e.State.Account = acct;
                 e.Accepted = true;
-                e.CityInfo = StartingCities;
+
+                if(Siege.SiegeShard)
+                {
+                    e.CityInfo = SiegeStartingCities;
+                }
+                else if (!Core.UOR)
+                {
+                    e.CityInfo = StartingCitiesT2A;
+                }
+                else if (!Core.SA)
+                {
+                    e.CityInfo = StartingCities;
+                }
+                else
+                {
+                    e.CityInfo = StartingCitiesSA;
+                }
             }
 
             if (!e.Accepted)

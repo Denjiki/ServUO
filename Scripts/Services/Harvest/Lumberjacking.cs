@@ -1,6 +1,7 @@
 using System;
 using Server.Items;
 using Server.Network;
+using System.Linq;
 
 namespace Server.Engines.Harvest
 {
@@ -63,7 +64,7 @@ namespace Server.Engines.Harvest
             lumber.ConsumedPerFeluccaHarvest = 20;
 
             // The chopping effect
-            lumber.EffectActions = new int[] { 13 };
+            lumber.EffectActions = new int[] { Core.SA ? 7 : 13 };
             lumber.EffectSounds = new int[] { 0x13E };
             lumber.EffectCounts = (Core.AOS ? new int[] { 1 } : new int[] { 1, 2, 2, 2, 3 });
             lumber.EffectDelay = TimeSpan.FromSeconds(1.6);
@@ -101,12 +102,13 @@ namespace Server.Engines.Harvest
 
                 lumber.BonusResources = new BonusHarvestResource[]
                 {
-                    new BonusHarvestResource(0, 83.9, null, null), //Nothing
+                    new BonusHarvestResource(0, 82.0, null, null), //Nothing
                     new BonusHarvestResource(100, 10.0, 1072548, typeof(BarkFragment)),
                     new BonusHarvestResource(100, 03.0, 1072550, typeof(LuminescentFungi)),
                     new BonusHarvestResource(100, 02.0, 1072547, typeof(SwitchItem)),
                     new BonusHarvestResource(100, 01.0, 1072549, typeof(ParasiticPlant)),
-                    new BonusHarvestResource(100, 00.1, 1072551, typeof(BrilliantAmber))
+                    new BonusHarvestResource(100, 01.0, 1072551, typeof(BrilliantAmber)),
+                    new BonusHarvestResource(100, 01.0, 1113756, typeof(CrystalShards), Map.TerMur),
                 };
             }
             else
@@ -133,16 +135,68 @@ namespace Server.Engines.Harvest
             #endregion
         }
 
+        public override Type MutateType(Type type, Mobile from, Item tool, HarvestDefinition def, Map map, Point3D loc, HarvestResource resource)
+        {
+            var newType = type;
+
+            if (tool is HarvestersAxe && ((HarvestersAxe)tool).Charges > 0)
+            {
+                if (type == typeof(Log))
+                    newType = typeof(Board);
+                else if (type == typeof(OakLog))
+                    newType = typeof(OakBoard);
+                else if (type == typeof(AshLog))
+                    newType = typeof(AshBoard);
+                else if (type == typeof(YewLog))
+                    newType = typeof(YewBoard);
+                else if (type == typeof(HeartwoodLog))
+                    newType = typeof(HeartwoodBoard);
+                else if (type == typeof(BloodwoodLog))
+                    newType = typeof(BloodwoodBoard);
+                else if (type == typeof(FrostwoodLog))
+                    newType = typeof(FrostwoodBoard);
+
+                if (newType != type)
+                {
+                    ((HarvestersAxe)tool).Charges--;
+                }
+            }
+
+            return newType;
+        }
+
+        public override void SendSuccessTo(Mobile from, Item item, HarvestResource resource)
+        {
+            if (item != null)
+            {
+                if (item != null && item.GetType().IsSubclassOf(typeof(BaseWoodBoard)))
+                {
+                    from.SendLocalizedMessage(1158776); // The axe magically creates boards from your logs.
+                    return;
+                }
+                else
+                {
+                    foreach (var res in m_Definition.Resources.Where(r => r.Types != null))
+                    {
+                        foreach (var type in res.Types)
+                        {
+                            if (item.GetType() == type)
+                            {
+                                res.SendSuccessTo(from);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
+            base.SendSuccessTo(from, item, resource);
+        }
+
         public override bool CheckHarvest(Mobile from, Item tool)
         {
             if (!base.CheckHarvest(from, tool))
                 return false;
-
-            if (tool.Parent != from)
-            {
-                from.SendLocalizedMessage(500487); // The axe must be equipped for any serious wood chopping.
-                return false;
-            }
 
             return true;
         }
@@ -152,11 +206,39 @@ namespace Server.Engines.Harvest
             if (!base.CheckHarvest(from, tool, def, toHarvest))
                 return false;
 
-            if (tool.Parent != from)
+			if (tool.Parent != from && from.Backpack != null && !tool.IsChildOf(from.Backpack))
+			{
+				from.SendLocalizedMessage(1080058); // This must be in your backpack to use it.
+				return false;
+			}
+
+			return true;
+        }
+
+        public override Type GetResourceType(Mobile from, Item tool, HarvestDefinition def, Map map, Point3D loc, HarvestResource resource)
+        {
+            #region Void Pool Items
+            HarvestMap hmap = HarvestMap.CheckMapOnHarvest(from, loc, def);
+
+            if (hmap != null && hmap.Resource >= CraftResource.RegularWood && hmap.Resource <= CraftResource.Frostwood)
             {
-                from.SendLocalizedMessage(500487); // The axe must be equipped for any serious wood chopping.
-                return false;
+                hmap.UsesRemaining--;
+                hmap.InvalidateProperties();
+
+                CraftResourceInfo info = CraftResources.GetInfo(hmap.Resource);
+
+                if (info != null)
+                    return info.ResourceTypes[0];
             }
+            #endregion
+
+            return base.GetResourceType(from, tool, def, map, loc, resource);
+        }
+
+        public override bool CheckResources(Mobile from, Item tool, HarvestDefinition def, Map map, Point3D loc, bool timed)
+        {
+            if (HarvestMap.CheckMapOnHarvest(from, loc, def) == null)
+                return base.CheckResources(from, tool, def, map, loc, timed);
 
             return true;
         }
@@ -176,7 +258,7 @@ namespace Server.Engines.Harvest
         public override void OnHarvestStarted(Mobile from, Item tool, HarvestDefinition def, object toHarvest)
         {
             base.OnHarvestStarted(from, tool, def, toHarvest);
-			
+
             if (Core.ML)
                 from.RevealingAction();
         }

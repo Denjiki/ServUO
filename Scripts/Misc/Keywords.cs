@@ -10,7 +10,7 @@ namespace Server.Misc
         public static void Initialize()
         {
             // Register our speech handler
-            EventSink.Speech += new SpeechEventHandler(EventSink_Speech);
+            EventSink.Speech += EventSink_Speech;
         }
 
         public static void EventSink_Speech(SpeechEventArgs args)
@@ -20,7 +20,7 @@ namespace Server.Misc
 
             for (int i = 0; i < keywords.Length; ++i)
             {
-                switch ( keywords[i] )
+                switch (keywords[i])
                 {
                     case 0x002A: // *i resign from my guild*
                         {

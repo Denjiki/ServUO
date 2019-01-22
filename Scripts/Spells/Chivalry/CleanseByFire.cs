@@ -49,20 +49,15 @@ namespace Server.Spells.Chivalry
                 return 1060718;
             }
         }// Expor Flamus
-        public override bool CheckCast()
-        {
-            if (Engines.ConPVP.DuelContext.CheckSuddenDeath(this.Caster))
-            {
-                this.Caster.SendMessage(0x22, "You cannot cast this spell when in sudden death.");
-                return false;
-            }
-
-            return base.CheckCast();
-        }
 
         public override void OnCast()
         {
             this.Caster.Target = new InternalTarget(this);
+        }
+
+        public override bool CheckDisturb(DisturbType type, bool firstCircle, bool resistable)
+        {
+            return true;
         }
 
         public void Target(Mobile m)
@@ -84,7 +79,7 @@ namespace Server.Spells.Chivalry
                 if (p != null)
                 {
                     // Cleanse by fire is now difficulty based 
-                    int chanceToCure = 10000 + (int)(this.Caster.Skills[SkillName.Chivalry].Value * 75) - ((p.Level + 1) * 2000);
+                    int chanceToCure = 10000 + (int)(this.Caster.Skills[SkillName.Chivalry].Value * 75) - ((p.RealLevel + 1) * 2000);
                     chanceToCure /= 100;
 
                     if (chanceToCure > Utility.Random(100))

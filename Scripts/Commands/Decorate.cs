@@ -10,6 +10,12 @@ namespace Server.Commands
 {
     public class Decorate
     {
+		private static string m_Key;
+		public static string Key
+		{
+			get { return m_Key; }
+		}
+
         public static void Initialize()
         {
             CommandSystem.Register("Decorate", AccessLevel.Administrator, new CommandEventHandler(Decorate_OnCommand));
@@ -24,18 +30,20 @@ namespace Server.Commands
 
             m_Mobile.SendMessage("Generating world decoration, please wait.");
 
-            Generate("Data/Decoration/Britannia", Map.Trammel, Map.Felucca);
-            Generate("Data/Decoration/Trammel", Map.Trammel);
-            Generate("Data/Decoration/Felucca", Map.Felucca);
-            Generate("Data/Decoration/Ilshenar", Map.Ilshenar);
-            Generate("Data/Decoration/Malas", Map.Malas);
-            Generate("Data/Decoration/Tokuno", Map.Tokuno);
+            Generate("deco", "Data/Decoration/Britannia", Map.Trammel, Map.Felucca);
+		    Generate("deco", "Data/Decoration/Trammel", Map.Trammel);
+			Generate("deco", "Data/Decoration/Felucca", Map.Felucca);
+			Generate("deco", "Data/Decoration/Ilshenar", Map.Ilshenar);
+			Generate("deco", "Data/Decoration/Malas", Map.Malas);
+			Generate("deco", "Data/Decoration/Tokuno", Map.Tokuno);
 
             m_Mobile.SendMessage("World generating complete. {0} items were generated.", m_Count);
         }
 
-        public static void Generate(string folder, params Map[] maps)
+        public static void Generate(string keyName, string folder, params Map[] maps)
         {
+			m_Key = keyName;
+
             if (!Directory.Exists(folder))
                 return;
 
@@ -132,7 +140,6 @@ namespace Server.Commands
         private static readonly Type typeofHintItem = typeof(HintItem);
         private static readonly Type typeofCannon = typeof(Cannon);
         private static readonly Type typeofSerpentPillar = typeof(SerpentPillar);
-        private static readonly Type typeofSutekQuestResource = typeof(SutekQuestResource);
 
         public Item Construct()
         {
@@ -465,33 +472,6 @@ namespace Server.Commands
                     else
                         item = (Item)Activator.CreateInstance(this.m_Type);
                 }
-                else if (typeofSutekQuestResource.IsAssignableFrom(this.m_Type))
-                {
-                    SutekResourceType type = SutekResourceType.BarrelHoops;
-                    bool fill = false;
-
-                    for (int i = 0; !fill && i < this.m_Params.Length; ++i)
-                    {
-                        if (this.m_Params[i].StartsWith("ResourceType"))
-                        {
-                            int indexOf = this.m_Params[i].IndexOf('=');
-
-                            if (indexOf >= 0)
-                            {
-                                type = (SutekResourceType)Enum.Parse(typeof(SutekResourceType), this.m_Params[i].Substring(++indexOf), true);
-                                fill = true;
-                            }
-                        }
-                    }
-
-                    if (fill)
-                        item = (Item)Activator.CreateInstance(this.m_Type, new object[] { type });
-                    else
-                        item = (Item)Activator.CreateInstance(this.m_Type);
-
-                    if (0 != this.m_ItemID)
-                        item.ItemID = this.m_ItemID;
-                }
                 else if (this.m_Type.IsSubclassOf(typeofBaseDoor))
                 {
                     DoorFacing facing = DoorFacing.WestCW;
@@ -588,7 +568,7 @@ namespace Server.Commands
                         int indexOf = this.m_Params[i].IndexOf('=');
 
                         if (indexOf >= 0)
-                            sp.SpawnNames.Add(this.m_Params[i].Substring(++indexOf));
+                            sp.SpawnObjects.Add(new Server.Mobiles.SpawnObject(this.m_Params[i].Substring(++indexOf)));
                     }
                     else if (this.m_Params[i].StartsWith("MinDelay"))
                     {
@@ -616,7 +596,7 @@ namespace Server.Commands
                         int indexOf = this.m_Params[i].IndexOf('=');
 
                         if (indexOf >= 0)
-                            sp.Count = Utility.ToInt32(this.m_Params[i].Substring(++indexOf));
+                            sp.MaxCount = Utility.ToInt32(this.m_Params[i].Substring(++indexOf));
                     }
                     else if (this.m_Params[i].StartsWith("Team"))
                     {
@@ -938,6 +918,48 @@ namespace Server.Commands
                 if (this.m_ItemID > 0)
                     item.ItemID = this.m_ItemID;
             }
+            else if(item is Moongate)
+            {
+                Moongate gate = (Moongate)item;
+
+                foreach(string param in m_Params)
+                {
+                    int indexOf = param.IndexOf('=');
+
+                    if (param.StartsWith("TargetMap"))
+                        gate.TargetMap = Map.Parse(param.Substring(++indexOf));
+                    else if (param.StartsWith("Target"))
+                        gate.Target = Point3D.Parse(param.Substring(++indexOf));
+                }
+            }
+            else if(item is TeleportRope)
+            {
+                TeleportRope rope = (TeleportRope)item;
+
+                foreach (string param in m_Params)
+                {
+                    int indexOf = param.IndexOf('=');
+
+                    if (param.StartsWith("ToMap"))
+                        rope.ToMap = Map.Parse(param.Substring(++indexOf));
+                    else if (param.StartsWith("ToLocation"))
+                        rope.ToLocation = Point3D.Parse(param.Substring(++indexOf));
+                }
+            }
+            else if(item is InstanceExitGate)
+            {
+                InstanceExitGate gate = (InstanceExitGate)item;
+
+                foreach (string param in m_Params)
+                {
+                    int indexOf = param.IndexOf('=');
+
+                    if (param.StartsWith("MapDest"))
+                        gate.MapDest = Map.Parse(param.Substring(++indexOf));
+                    else if (param.StartsWith("LocDest"))
+                        gate.LocDest = Point3D.Parse(param.Substring(++indexOf));
+                }
+            }
             else if (this.m_ItemID > 0)
             {
                 item.ItemID = this.m_ItemID;
@@ -1130,6 +1152,7 @@ namespace Server.Commands
                     }
                     else
                     {
+						WeakEntityCollection.Add(Decorate.Key, item);
                         item.MoveToWorld(loc, maps[j]);
                         ++count;
 
