@@ -254,10 +254,10 @@ namespace Server.Mobiles
         public bool UseSummoningRite { get; set; }
 
         #region Guantlet Points
-        private double m_GauntletPoints;
+        /*private double m_GauntletPoints;
 
 		[CommandProperty(AccessLevel.Administrator)]
-		public double GauntletPoints { get { return m_GauntletPoints; } set { m_GauntletPoints = value; } }
+		public double GauntletPoints { get { return m_GauntletPoints; } set { m_GauntletPoints = value; } }*/
 		#endregion
 
         #region Points System
@@ -430,22 +430,7 @@ namespace Server.Mobiles
 		[CommandProperty(AccessLevel.GameMaster)]
 		public TimeSpan NpcGuildGameTime { get { return m_NpcGuildGameTime; } set { m_NpcGuildGameTime = value; } }
 
-		private int m_ToTItemsTurnedIn;
-
-		[CommandProperty(AccessLevel.GameMaster)]
-		public int ToTItemsTurnedIn { get { return m_ToTItemsTurnedIn; } set { m_ToTItemsTurnedIn = value; } }
-
-		private int m_ToTTotalMonsterFame;
-
-		[CommandProperty(AccessLevel.GameMaster)]
-		public int ToTTotalMonsterFame { get { return m_ToTTotalMonsterFame; } set { m_ToTTotalMonsterFame = value; } }
-
 		public int ExecutesLightningStrike { get { return m_ExecutesLightningStrike; } set { m_ExecutesLightningStrike = value; } }
-
-		private int m_VASTotalMonsterFame;
-
-		[CommandProperty(AccessLevel.GameMaster)]
-		public int VASTotalMonsterFame { get { return m_VASTotalMonsterFame; } set { m_VASTotalMonsterFame = value; } }
 
 		[CommandProperty(AccessLevel.GameMaster)]
 		public int ToothAche { get { return BaseSweet.GetToothAche(this); } set { BaseSweet.SetToothAche(this, value, true); } }
@@ -645,8 +630,11 @@ namespace Server.Mobiles
 		[CommandProperty(AccessLevel.GameMaster)]
 		public DateTime AnkhNextUse { get { return m_AnkhNextUse; } set { m_AnkhNextUse = value; } }
 
-		#region Mondain's Legacy
-		[CommandProperty(AccessLevel.GameMaster)]
+        [CommandProperty(AccessLevel.GameMaster)]
+        public DateTime NextGemOfSalvationUse { get; set; }
+
+        #region Mondain's Legacy
+        [CommandProperty(AccessLevel.GameMaster)]
 		public bool Bedlam { get { return GetFlag(PlayerFlag.Bedlam); } set { SetFlag(PlayerFlag.Bedlam, value); } }
 
 		[CommandProperty(AccessLevel.GameMaster)]
@@ -1210,7 +1198,7 @@ namespace Server.Mobiles
         {
             int resistance = base.GetResistance(type) + SphynxFortune.GetResistanceBonus(this, type);
 
-            if (Server.Engines.CityLoyalty.CityLoyaltySystem.HasTradeDeal(this, Server.Engines.CityLoyalty.TradeDeal.SocietyOfClothiers))
+            if (CityLoyaltySystem.HasTradeDeal(this, TradeDeal.SocietyOfClothiers))
             {
                 resistance++;
                  return Math.Min(resistance, GetMaxResistance(type));
@@ -1301,6 +1289,8 @@ namespace Server.Mobiles
                 }, 
                 (EtherealMount)from.Mount);
             }
+
+            from.CheckStatTimers();
         }
 
 		private bool m_NoDeltaRecursion;
@@ -1636,7 +1626,7 @@ namespace Server.Mobiles
             if (pm.AcceleratedStart > DateTime.UtcNow)
 			{
 				pm.AcceleratedStart = DateTime.UtcNow;
-				ScrollofAlacrity.AlacrityEnd(pm);
+                ScrollOfAlacrity.AlacrityEnd(pm);
 			}
 			#endregion
 
@@ -2023,7 +2013,9 @@ namespace Server.Mobiles
 			{
 				if (Core.ML && IsPlayer())
 				{
-					return Math.Min(base.Str, StrMaxCap);
+                    var str = base.Str;
+
+                    return Math.Min(base.Str, StrMaxCap);
 				}
 
 				return base.Str;
@@ -2053,7 +2045,9 @@ namespace Server.Mobiles
 			{
 				if (Core.ML && IsPlayer())
 				{
-					return Math.Min(base.Dex, DexMaxCap);
+                    var dex = base.Dex;
+
+                    return Math.Min(dex, DexMaxCap);
 				}
 
 				return base.Dex;
@@ -2207,7 +2201,7 @@ namespace Server.Mobiles
 
                     if (info.Defender.InRange(Location, Core.GlobalMaxUpdateRange) && info.Defender.DamageEntries.Any(de => de.Damager == this))
                     {
-                        info.Defender.RegisterDamage(amount / 2, from);
+                        info.Defender.RegisterDamage(amount, from);
                     }
 
                     if (info.Defender.Player && from.CanBeHarmful(info.Defender, false))
@@ -2222,7 +2216,7 @@ namespace Server.Mobiles
 
                     if (info.Attacker.InRange(Location, Core.GlobalMaxUpdateRange) && info.Attacker.DamageEntries.Any(de => de.Damager == this))
                     {
-                        info.Attacker.RegisterDamage(amount / 2, from);
+                        info.Attacker.RegisterDamage(amount, from);
                     }
 
                     if (info.Attacker.Player && from.CanBeHarmful(info.Attacker, false))
@@ -2463,7 +2457,15 @@ namespace Server.Mobiles
 			}
 			else
 			{
-				if (Alive && Core.AOS)
+                if (Core.HS)
+                {
+                    BaseGalleon galleon = BaseGalleon.FindGalleonAt(from.Location, from.Map);
+
+                    if (galleon != null && galleon.IsOwner(from))
+                        list.Add(new ShipAccessEntry(this, from, galleon));
+                }
+
+                if (Alive && Core.AOS)
 				{
 					Party theirParty = from.Party as Party;
 					Party ourParty = Party as Party;
@@ -2643,9 +2645,9 @@ namespace Server.Mobiles
             }
         }
 
-        public static int GetInsuranceCost(Item item)
+        public int GetInsuranceCost(Item item)
         {
-            var imbueWeight = Imbuing.GetTotalWeight(item);
+            var imbueWeight = Imbuing.GetTotalWeight(item, -1, false, false);
             int cost = 600; // this handles old items, set items, etc
 
             if (item.GetType().IsAssignableFrom(typeof(Factions.FactionItem)))
@@ -2655,12 +2657,15 @@ namespace Server.Mobiles
             else if (Mobiles.GenericBuyInfo.BuyPrices.ContainsKey(item.GetType()))
                 cost = Math.Min(800, Math.Max(10, Mobiles.GenericBuyInfo.BuyPrices[item.GetType()]));
             else if (item.LootType == LootType.Newbied)
-                return 10;
+                cost = 10;
 
             var negAttrs = RunicReforging.GetNegativeAttributes(item);
 
             if (negAttrs != null && negAttrs.Prized > 0)
                 cost *= 2;
+
+            if (Region != null)
+                cost = (int)(cost * Region.InsuranceMultiplier);
 
             return cost;
         }
@@ -2813,6 +2818,9 @@ namespace Server.Mobiles
 
         private bool DisplayInItemInsuranceGump(Item item)
         {
+            if (item.Parent is LockableContainer && ((LockableContainer)item.Parent).Locked)
+                return false;
+
             return ((item.Visible || AccessLevel >= AccessLevel.GameMaster) && (item.Insured || CanInsure(item)));
         }
 
@@ -2878,7 +2886,7 @@ namespace Server.Mobiles
                 for (int i = 0; i < items.Length; ++i)
                 {
                     if (insure[i])
-                        cost += GetInsuranceCost(items[i]);
+                        cost += m_From.GetInsuranceCost(items[i]);
                 }
 
                 AddHtmlLocalized(15, 420, 300, 20, 1114310, 0x7FFF, false, false); // GOLD AVAILABLE:
@@ -2903,12 +2911,12 @@ namespace Server.Mobiles
                     if (insure[i])
                     {
                         AddButton(400, y, 9723, 9724, 100 + i, GumpButtonType.Reply, 0);
-                        AddLabel(250, y, 0x481, GetInsuranceCost(item).ToString());
+                        AddLabel(250, y, 0x481, m_From.GetInsuranceCost(item).ToString());
                     }
                     else
                     {
                         AddButton(400, y, 9720, 9722, 100 + i, GumpButtonType.Reply, 0);
-                        AddLabel(250, y, 0x66C, GetInsuranceCost(item).ToString());
+                        AddLabel(250, y, 0x66C, m_From.GetInsuranceCost(item).ToString());
                     }
                 }
 
@@ -3367,7 +3375,10 @@ namespace Server.Mobiles
 
 			if (msgNum == 1154111)
 			{
-				SendLocalizedMessage(msgNum, RawName);
+                if (to != null)
+                {
+                    SendLocalizedMessage(msgNum, to.Name);
+                }
 			}
 			else
 			{
@@ -3811,7 +3822,7 @@ namespace Server.Mobiles
 
 				if (AutoRenewInsurance)
 				{
-					int cost = (m_InsuranceAward == null ? insuredAmount : insuredAmount / 2);
+                    int cost = (m_InsuranceAward == null ? insuredAmount : insuredAmount / 2);
 
 					if (Banker.Withdraw(this, cost))
 					{
@@ -4181,8 +4192,8 @@ namespace Server.Mobiles
 			m_AutoStabled = new List<Mobile>();
 
 			#region Mondain's Legacy
-			m_Quests = new List<BaseQuest>();
-			m_Chains = new Dictionary<QuestChain, BaseChain>();
+			//m_Quests = new List<BaseQuest>();
+			//m_Chains = new Dictionary<QuestChain, BaseChain>();
 			m_DoneQuests = new List<QuestRestartInfo>();
 			m_Collections = new Dictionary<Collection, int>();
 			m_RewardTitles = new List<object>();
@@ -4311,7 +4322,7 @@ namespace Server.Mobiles
 
         public override ApplyPoisonResult ApplyPoison(Mobile from, Poison poison)
 		{
-			if (!Alive)
+			if (!Alive || poison == null)
 			{
 				return ApplyPoisonResult.Immune;
 			}
@@ -4392,7 +4403,7 @@ namespace Server.Mobiles
 		{ 
             get
             {
-                int facetBonus = !Siege.SiegeShard && this.Map == Map.Felucca ? RandomItemGenerator.FeluccaLuckBonus : 250;
+                int facetBonus = !Siege.SiegeShard && this.Map == Map.Felucca ? RandomItemGenerator.FeluccaLuckBonus : 0;
 
                 return Luck + FountainOfFortune.GetLuckBonus(this) + facetBonus;
             }
@@ -4496,6 +4507,11 @@ namespace Server.Mobiles
 
 			switch (version)
 			{
+                case 40: // Version 40, moved gauntlet points, virtua artys and TOT turn ins to PointsSystem
+                case 39: // Version 39, removed ML quest save/load
+                case 38:
+                    NextGemOfSalvationUse = reader.ReadDateTime();
+                    goto case 37;
                 case 37:
                     m_ExtendedFlags = (ExtendedPlayerFlag)reader.ReadInt();
 				    goto case 36;
@@ -4528,7 +4544,10 @@ namespace Server.Mobiles
                 case 30: goto case 29;
 				case 29:
 					{
-						m_GauntletPoints = reader.ReadDouble();
+                        if (version < 40)
+                        {
+                            PointsSystem.DoomGauntlet.SetPoints(this, reader.ReadDouble());
+                        }
 
 						m_SSNextSeed = reader.ReadDateTime();
 						m_SSSeedExpire = reader.ReadDateTime();
@@ -4548,12 +4567,24 @@ namespace Server.Mobiles
                             reader.ReadString(); // Old m_ExpTitle
                         }
 
-                        m_VASTotalMonsterFame = reader.ReadInt();
+                        if (version < 40)
+                        {
+                            PointsSystem.VirtueArtifacts.SetPoints(this, reader.ReadInt());
+                        }
 
-						m_Quests = QuestReader.Quests(reader, this);
-						m_Chains = QuestReader.Chains(reader);
+                        if (version < 39)
+                        {
+                            List<BaseQuest> quests = QuestReader.Quests(reader, this);
+                            Dictionary<QuestChain, BaseChain> dic = QuestReader.Chains(reader);
 
-						m_Collections = new Dictionary<Collection, int>();
+                            if (quests != null && quests.Count > 0)
+                                MondainQuestData.QuestData[this] = quests;
+
+                            if (dic != null && dic.Count > 0)
+                                MondainQuestData.ChainData[this] = dic;
+                        }
+
+                        m_Collections = new Dictionary<Collection, int>();
 						m_RewardTitles = new List<object>();
 
 						for (int i = reader.ReadInt(); i > 0; i--)
@@ -4624,8 +4655,10 @@ namespace Server.Mobiles
 					}
 				case 21:
 					{
-						m_ToTItemsTurnedIn = reader.ReadEncodedInt();
-						m_ToTTotalMonsterFame = reader.ReadInt();
+                        if (version < 40)
+                        {
+                            PointsSystem.TreasuresOfTokuno.Convert(this, reader.ReadEncodedInt(), reader.ReadInt());
+                        }
 						goto case 20;
 					}
 				case 20:
@@ -4823,7 +4856,7 @@ namespace Server.Mobiles
 			}
 
 			#region Mondain's Legacy
-			if (m_Quests == null)
+			/*if (m_Quests == null)
 			{
 				m_Quests = new List<BaseQuest>();
 			}
@@ -4831,7 +4864,7 @@ namespace Server.Mobiles
 			if (m_Chains == null)
 			{
 				m_Chains = new Dictionary<QuestChain, BaseChain>();
-			}
+			}*/
 
 			if (m_DoneQuests == null)
 			{
@@ -4940,7 +4973,9 @@ namespace Server.Mobiles
 
 			base.Serialize(writer);
 
-			writer.Write(37); // version
+			writer.Write(40); // version
+
+            writer.Write((DateTime)NextGemOfSalvationUse);
 
             writer.Write((int)m_ExtendedFlags);
 
@@ -4966,9 +5001,6 @@ namespace Server.Mobiles
 
             // Version 30 open to take out old Queens Loyalty Info
 
-			// Version 29
-			writer.Write(m_GauntletPoints);
-
 			#region Plant System
 			writer.Write(m_SSNextSeed);
 			writer.Write(m_SSSeedExpire);
@@ -4976,13 +5008,9 @@ namespace Server.Mobiles
 			writer.Write(m_SSSeedMap);
 			#endregion
 
-            writer.Write(m_VASTotalMonsterFame);
+            #region Mondain's Legacy
 
-			#region Mondain's Legacy
-			QuestWriter.Quests(writer, m_Quests);
-			QuestWriter.Chains(writer, m_Chains);
-
-			if (m_Collections == null)
+            if (m_Collections == null)
 			{
 				writer.Write(0);
 			}
@@ -5039,8 +5067,6 @@ namespace Server.Mobiles
 			ChampionTitleInfo.Serialize(writer, m_ChampionTitles);
 
 			writer.Write(m_LastValorLoss);
-			writer.WriteEncodedInt(m_ToTItemsTurnedIn);
-			writer.Write(m_ToTTotalMonsterFame); //This ain't going to be a small #.
 
 			writer.WriteEncodedInt(m_AllianceMessageHue);
 			writer.WriteEncodedInt(m_GuildMessageHue);
@@ -5271,7 +5297,7 @@ namespace Server.Mobiles
 					{
                         string cust = null;
 
-                        if ((int)m_RewardTitles[m_SelectedTitle] == 1154017 && Server.Engines.CityLoyalty.CityLoyaltySystem.HasCustomTitle(this, out cust))
+                        if ((int)m_RewardTitles[m_SelectedTitle] == 1154017 && CityLoyaltySystem.HasCustomTitle(this, out cust))
                         {
                             list.Add(1154017, cust); // ~1_TITLE~ of ~2_CITY~
                         }
@@ -5502,15 +5528,29 @@ namespace Server.Mobiles
 
 		[CommandProperty(AccessLevel.GameMaster)]
 		public SolenFriendship SolenFriendship { get { return m_SolenFriendship; } set { m_SolenFriendship = value; } }
-		#endregion
+        #endregion
 
-		#region Mondain's Legacy
-		private List<BaseQuest> m_Quests;
+        #region Mondain's Legacy
+        /*private List<BaseQuest> m_Quests;
 		private Dictionary<QuestChain, BaseChain> m_Chains;
 
 		public List<BaseQuest> Quests { get { return m_Quests; } }
+        public Dictionary<QuestChain, BaseChain> Chains { get { return m_Chains; } }*/
+        public List<BaseQuest> Quests
+        {
+            get
+            {
+                return MondainQuestData.GetQuests(this);
+            }
+        }
 
-		public Dictionary<QuestChain, BaseChain> Chains { get { return m_Chains; } }
+        public Dictionary<QuestChain, BaseChain> Chains
+        {
+            get
+            {
+                return MondainQuestData.GetChains(this);
+            }
+        }
 
 		[CommandProperty(AccessLevel.GameMaster)]
 		public bool Peaced
@@ -5709,14 +5749,7 @@ namespace Server.Mobiles
 		}
 
         public override void AddNameProperties(ObjectPropertyList list)
-        {
-            string name = Name;
-
-            if (name == null)
-            {
-                name = String.Empty;
-            }
-
+        {           
             string prefix = "";
 
             if (ShowFameTitle && Fame >= 10000)
@@ -5734,36 +5767,60 @@ namespace Server.Mobiles
             BaseGuild guild = Guild;
             bool vvv = Server.Engines.VvV.ViceVsVirtueSystem.IsVvV(this) && (ViceVsVirtueSystem.EnhancedRules || this.Map == Faction.Facet);
 
-            if (!vvv && m_OverheadTitle != null)
+            if (m_OverheadTitle != null)
             {
-                int loc = Utility.ToInt32(m_OverheadTitle);
-
-                if (loc > 0)
+                if (vvv)
                 {
-                    if (Server.Engines.CityLoyalty.CityLoyaltySystem.ApplyCityTitle(this, list, prefix, loc))
-                        return;
+                    suffix = "[VvV]";
                 }
-                else if (suffix.Length > 0)
-                    suffix = String.Format("{0} {1}", suffix, m_OverheadTitle);
                 else
-                    suffix = String.Format("{0}", m_OverheadTitle);
+                {
+                    int loc = Utility.ToInt32(m_OverheadTitle);
+
+                    if (loc > 0)
+                    {
+                        if (CityLoyaltySystem.ApplyCityTitle(this, list, prefix, loc))
+                            return;
+                    }
+                    else if (suffix.Length > 0)
+                    {
+                        suffix = String.Format("{0} {1}", suffix, m_OverheadTitle);
+                    }
+                    else
+                    {
+                        suffix = String.Format("{0}", m_OverheadTitle);
+                    }
+                }
             }
-            else if (vvv || (guild != null && DisplayGuildAbbr))
+            else if (guild != null && DisplayGuildAbbr)
             {
                 if (vvv)
                 {
                     if (guild != null && DisplayGuildAbbr)
+                    {
                         suffix = String.Format("[{0}] [VvV]", Utility.FixHtml(guild.Abbreviation));
+                    }
                     else
+                    {
                         suffix = "[VvV]";
+                    }
                 }
                 else if (suffix.Length > 0)
+                {
                     suffix = String.Format("{0} [{1}]", suffix, Utility.FixHtml(guild.Abbreviation));
+                }
                 else
+                {
                     suffix = String.Format("[{0}]", Utility.FixHtml(guild.Abbreviation));
+                }
+            }
+            else if (vvv)
+            {
+                suffix = "[VvV]";
             }
 
             suffix = ApplyNameSuffix(suffix);
+			string name = Name;
 
             list.Add(1050045, "{0} \t{1}\t {2}", prefix, name, suffix); // ~1_PREFIX~~2_NAME~~3_SUFFIX~
 

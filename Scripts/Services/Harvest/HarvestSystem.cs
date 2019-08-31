@@ -5,6 +5,7 @@ using Server.Targeting;
 using Server.Engines.Quests;
 using Server.Engines.Quests.Hag;
 using Server.Mobiles;
+using System.Linq;
 
 namespace Server.Engines.Harvest
 {
@@ -181,6 +182,8 @@ namespace Server.Engines.Harvest
                         if (item is BaseGranite)
                             feluccaAmount = 3;
 
+                        Caddellite.OnHarvest(from, tool, this, item);
+
                         //The whole harvest system is kludgy and I'm sure this is just adding to it.
                         if (item.Stackable)
                         {
@@ -203,8 +206,10 @@ namespace Server.Engines.Harvest
                             item.Amount += WoodsmansTalisman.CheckHarvest(from, type, this);
                         }
 
-                        bank.Consume(amount, from);
-						EventSink.InvokeResourceHarvestSuccess(new ResourceHarvestSuccessEventArgs(from, tool,item, this));
+                        if (from.AccessLevel == AccessLevel.Player)
+                        {
+                            bank.Consume(amount, from);
+                        }
 
                         if (Give(from, item, def.PlaceAtFeetIfFull))
                         {
@@ -217,16 +222,18 @@ namespace Server.Engines.Harvest
                         }
 
                         BonusHarvestResource bonus = def.GetBonusResource();
+                        Item bonusItem = null;
 
                         if (bonus != null && bonus.Type != null && skillBase >= bonus.ReqSkill)
                         {
 							if (bonus.RequiredMap == null || bonus.RequiredMap == from.Map)
 							{
-								Item bonusItem = Construct(bonus.Type, from, tool);
+							    bonusItem = Construct(bonus.Type, from, tool);
+                                Caddellite.OnHarvest(from, tool, this, bonusItem);
 
-								if (Give(from, bonusItem, true))	//Bonuses always allow placing at feet, even if pack is full irregrdless of def
+                                if (Give(from, bonusItem, true))	//Bonuses always allow placing at feet, even if pack is full irregrdless of def
 								{
-									bonus.SendSuccessTo(from);
+                                    bonus.SendSuccessTo(from);
 								}
 								else
 								{
@@ -234,6 +241,8 @@ namespace Server.Engines.Harvest
 								}
 							}
                         }
+
+                        EventSink.InvokeResourceHarvestSuccess(new ResourceHarvestSuccessEventArgs(from, tool, item, bonusItem, this));
                     }
 
                     #region High Seas
@@ -765,11 +774,42 @@ namespace Server
     {
         public FurnitureAttribute()
         {
+        }        
+
+        private static bool IsNotChoppables(Item item)
+        {
+            return _NotChoppables.Any(t => t == item.GetType());
         }
+
+        private static Type[] _NotChoppables = new Type[]
+        {
+            typeof(CommodityDeedBox), typeof(ChinaCabinet), typeof(PieSafe), typeof(AcademicBookCase), typeof(JewelryBox),
+            typeof(WoodenBookcase), typeof(Countertop), typeof(Mailbox)
+        };
 
         public static bool Check(Item item)
         {
-            return (item != null && item.GetType().IsDefined(typeof(FurnitureAttribute), false));
+            if (item == null)
+            {
+                return false;
+            }
+			
+			if (IsNotChoppables(item))
+			{
+				return false;
+			}
+
+            if (item.GetType().IsDefined(typeof(FurnitureAttribute), false))
+            {
+                return true;
+            }
+
+            if (item is AddonComponent && ((AddonComponent)item).Addon != null && ((AddonComponent)item).Addon.GetType().IsDefined(typeof(FurnitureAttribute), false))
+            {
+                return true;
+            }
+
+            return false;
         }
     }
 }

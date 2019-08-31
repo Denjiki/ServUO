@@ -194,11 +194,6 @@ namespace Server.Spells
 
         public static void Turn(Mobile from, object to)
         {
-            Turn(from, to, 0);
-        }
-
-        public static void Turn(Mobile from, object to, int delay)
-        {
             IPoint3D target = to as IPoint3D;
             int d = -1;
 
@@ -217,16 +212,10 @@ namespace Server.Spells
                 d = (int)from.GetDirectionTo(target);
             }
 
-            if (d > -1 && delay > 0)
-            {
-                Timer.DelayCall(TimeSpan.FromMilliseconds(delay), () =>
-                    {
-                        from.Direction = (Direction)d;
-                    });
-            }
-            else if (d > -1)
+            if (d > -1)
             {
                 from.Direction = (Direction)d;
+                from.ProcessDelta();
             }
         }
 
@@ -243,7 +232,7 @@ namespace Server.Spells
             if (map == null)
                 return false;
 
-            for (int offset = 0; offset < 10; ++offset)
+            for (int offset = 0; offset < 25; ++offset)
             {
                 Point3D loc = new Point3D(p.X, p.Y, p.Z - offset);
 
@@ -369,8 +358,11 @@ namespace Server.Spells
             string name = String.Format("[Magic] {0} Buff", type);
 
             StatMod mod = target.GetStatMod(name);
-			if (mod != null)
-				offset = Math.Max(mod.Offset, offset);
+
+            if (mod != null)
+            {
+                offset = Math.Max(mod.Offset, offset);
+            }
 
             target.AddStatMod(new StatMod(type, name, offset, duration));
 			Timer.DelayCall(duration, RemoveStatOffsetCallback, target);
@@ -480,11 +472,11 @@ namespace Server.Spells
                 switch( type )
                 {
                     case StatType.Str:
-                        return (int)(target.RawStr * percent);
+                        return (int)Math.Ceiling(target.RawStr * percent);
                     case StatType.Dex:
-                        return (int)(target.RawDex * percent);
+                        return (int)Math.Ceiling(target.RawDex * percent);
                     case StatType.Int:
-                        return (int)(target.RawInt * percent);
+                        return (int)Math.Ceiling(target.RawInt * percent);
                 }
             }
 
@@ -639,6 +631,11 @@ namespace Server.Spells
         }
 
         public static IEnumerable<IDamageable> AcquireIndirectTargets(Mobile caster, IPoint3D p, Map map, int range)
+        {
+            return AcquireIndirectTargets(caster, p, map, range, true);
+        }
+
+        public static IEnumerable<IDamageable> AcquireIndirectTargets(Mobile caster, IPoint3D p, Map map, int range, bool losCheck)
         {  
             if (map == null)
             {
@@ -654,7 +651,7 @@ namespace Server.Spells
                     continue;
                 }
 
-                if (!id.Alive || !caster.InLOS(id) || !caster.CanBeHarmful(id, false))
+                if (!id.Alive || (losCheck && !caster.InLOS(id)) || !caster.CanBeHarmful(id, false))
                 {
                     continue;
                 }
@@ -792,6 +789,8 @@ namespace Server.Spells
 
             return false;
         }
+
+        public static bool RestrictRedTravel { get { return Config.Get("General.RestrictRedsToFel", false); } }
 
         private delegate bool TravelValidator(Map map, Point3D loc);
 
@@ -937,6 +936,32 @@ namespace Server.Spells
             return isValid;
         }
 
+        public static bool CheckCanTravel(Mobile m)
+        {
+            if (Factions.Sigil.ExistsOn(m))
+            {
+                m.SendLocalizedMessage(1061632); // You can't do that while carrying the sigil.
+                return false;
+            }
+            else if (m.Criminal)
+            {
+                m.SendLocalizedMessage(1005561, "", 0x22); // Thou'rt a criminal and cannot escape so easily.
+                return false;
+            }
+            else if (CheckCombat(m))
+            {
+                m.SendLocalizedMessage(1005564, "", 0x22); // Wouldst thou flee during the heat of battle??
+                return false;
+            }
+            else if (Server.Misc.WeightOverloading.IsOverloaded(m))
+            {
+                m.SendLocalizedMessage(502359, "", 0x22); // Thou art too encumbered to move.
+                return false;
+            }
+
+            return true;
+        }
+
         public static bool IsWindLoc(Point3D loc)
         {
             int x = loc.X, y = loc.Y;
@@ -959,21 +984,14 @@ namespace Server.Spells
             return (map == Map.Ilshenar);
         }
 
-        public static bool IsSolenHiveLoc(Point3D loc)
-        {
-            int x = loc.X, y = loc.Y;
-
-            return (x >= 5640 && y >= 1776 && x < 5935 && y < 2039);
-        }
-
         public static bool IsTrammelSolenHive(Map map, Point3D loc)
         {
-            return (map == Map.Trammel && IsSolenHiveLoc(loc));
+            return map == Map.Trammel && Region.Find(loc, map).Name == "Solen Hives";
         }
 
         public static bool IsFeluccaSolenHive(Map map, Point3D loc)
         {
-            return (map == Map.Felucca && IsSolenHiveLoc(loc));
+            return map == Map.Felucca && Region.Find(loc, map).Name == "Solen Hives";
         }
 
         public static bool IsFeluccaT2A(Map map, Point3D loc)

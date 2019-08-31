@@ -6,6 +6,7 @@ using Server.Guilds;
 using Server.Mobiles;
 using Server.Engines.Quests;
 using Server.Commands;
+using Server.Engines.Khaldun;
 
 using System;
 using System.IO;
@@ -55,6 +56,19 @@ namespace Server.Services.TownCryer
             NewsEntries = new List<TownCryerNewsEntry>();
             TownCryerExempt = new List<PlayerMobile>();
 
+            GreetingsEntries.Add(new TownCryerGreetingEntry(1158955));
+            /*<center>Rising Tide</center><br><br>The Seas call to us once more! A powerful pirate called Hook has
+             * taken control of the Guild, an organization of cutthroats and brigands engaged in high seas piracy!
+             * Great peril stands in the way of those brave enough to challenge Hook's vile plan - read the latest
+             * headlines in the Town Cryer to learn more!<br><br>The realms tinkers have been busy at work and are
+             * proud to announce advancements in ship to ship ballistics!  The cannon firing process has been streamlined
+             * - from crafting supplies through loading the cannons and lighting the fuse!  FIRE IN THE HOLE!
+             * <br><br>Whether you are celebrating your first year in Britannia or your 22nd we want to extend a
+             * very special thank you to our veteran players!  New veteran rewards are available! New MONSTER STATUETTES
+             * featuring Krampus, Khal Ankur, and the Krampus Minion, are available!  Decorate your home with the WATER
+             * WHEEL and personalize your clothes with the EMBROIDERY TOOL.  Every crafter will want to get their hands
+             * on the REPAIR BENCH and TINKER BENCH!*/
+
             GreetingsEntries.Add(new TownCryerGreetingEntry(1158757));
             /*Fall is approaching and strangeness is afoot in Britannia!<br><br>Britannians are looking skyward in 
              * search of constellations and other celestial objects using the new telescope!<br><br>The pumpkin patches 
@@ -81,18 +95,21 @@ namespace Server.Services.TownCryer
             {
                 EventSink.Login += OnLogin;
 
-                NewsEntries.Add(new TownCryerNewsEntry(1158083, 1158085, 0x617, typeof(TamingPetQuest), "https://uo.com/wiki/ultima-online-wiki/skills/animal-taming/animal-training/")); // Animal Training
-                NewsEntries.Add(new TownCryerNewsEntry(1158086, 1158088, 0x61D, typeof(ExploringTheDeepQuest), null));
+                NewsEntries.Add(new TownCryerNewsEntry(1158944, 1158945, 0x9CEA, null, "https://uo.com/wiki/ultima-online-wiki/combat/pvm-player-versus-monster/rising-tide/")); // Rising Tide
+                NewsEntries.Add(new TownCryerNewsEntry(1158552, 1158553, 0x6CE, typeof(GoingGumshoeQuest), null)); // Going Gumshoe
+                NewsEntries.Add(new TownCryerNewsEntry(1158095, 1158097, 0x61E, null, "https://uo.com/")); // Britain Commons
                 NewsEntries.Add(new TownCryerNewsEntry(1158089, 1158091, 0x60F, null, "https://uo.com/wiki/ultima-online-wiki/gameplay/npc-commercial-transactions/clean-up-britannia/")); // Cleanup Britannia
-                NewsEntries.Add(new TownCryerNewsEntry(1158092, 1158094, 0x651, typeof(HuntmastersChallengeQuest), "https://uo.com/wiki/ultima-online-wiki/gameplay/huntmasters-challenge/")); // Huntsmaster Challenge 
                 NewsEntries.Add(new TownCryerNewsEntry(1158098, 1158100, 0x615, null, "https://uo.com/wiki/ultima-online-wiki/gameplay/crafting/bulk-orders/")); // New Bulk Orders
                 NewsEntries.Add(new TownCryerNewsEntry(1158101, 1158103, 0x616, null, "https://uo.com/wiki/ultima-online-wiki/a-summary-for-returning-players/weapons-armor-and-loot-revamps-2016/")); // 2016 Loot Revamps
+                NewsEntries.Add(new TownCryerNewsEntry(1158116, 1158118, 0x64F, null, "https://uo.com/wiki/ultima-online-wiki/gameplay/the-virtues/")); // Virtues
+                NewsEntries.Add(new TownCryerNewsEntry(1158083, 1158085, 0x617, typeof(TamingPetQuest), "https://uo.com/wiki/ultima-online-wiki/skills/animal-taming/animal-training/")); // Animal Training
+                NewsEntries.Add(new TownCryerNewsEntry(1158086, 1158088, 0x61D, typeof(ExploringTheDeepQuest), null));
+                NewsEntries.Add(new TownCryerNewsEntry(1158092, 1158094, 0x651, typeof(HuntmastersChallengeQuest), "https://uo.com/wiki/ultima-online-wiki/gameplay/huntmasters-challenge/")); // Huntsmaster Challenge 
                 NewsEntries.Add(new TownCryerNewsEntry(1158104, 1158106, 0x61C, typeof(PaladinsOfTrinsic), "https://uo.com/wiki/ultima-online-wiki/world/dungeons/dungeon-shame/")); //  New Shame 
                 NewsEntries.Add(new TownCryerNewsEntry(1158107, 1158109, 0x61A, typeof(RightingWrongQuest), "https://uo.com/wiki/ultima-online-wiki/world/dungeons/dungeon-wrong/")); // New Wrong
-                NewsEntries.Add(new TownCryerNewsEntry(1158110, 1158112, 0x64E, typeof(AVisitToCastleBlackthornQuest), "https://uo.com/wiki/ultima-online-wiki/items/artifacts-castle-blackthorn/")); // Castle Blackthorn
                 NewsEntries.Add(new TownCryerNewsEntry(1158113, 1158115, 0x64C, typeof(BuriedRichesQuest), "https://uo.com/wiki/ultima-online-wiki/gameplay/treasure-maps/")); // New TMaps
-                NewsEntries.Add(new TownCryerNewsEntry(1158116, 1158118, 0x64F, null, "https://uo.com/wiki/ultima-online-wiki/gameplay/the-virtues/")); // Virues
                 NewsEntries.Add(new TownCryerNewsEntry(1158119, 1158121, 0x64D, typeof(APleaFromMinocQuest), "https://uo.com/wiki/ultima-online-wiki/world/dungeons/dungeon-covetous/")); // New Covetous
+                NewsEntries.Add(new TownCryerNewsEntry(1158110, 1158112, 0x64E, typeof(AVisitToCastleBlackthornQuest), "https://uo.com/wiki/ultima-online-wiki/items/artifacts-castle-blackthorn/")); // Castle Blackthorn
                 NewsEntries.Add(new TownCryerNewsEntry(1158122, 1158124, 0x650, typeof(WishesOfTheWispQuest), "https://uo.com/wiki/ultima-online-wiki/world/dungeons/dungeon-despise-trammel/")); // New Despise
 
                 // New greeting, resets all TC hiding
@@ -532,7 +549,7 @@ namespace Server.Services.TownCryer
                 case 1:
                     greetingsCount = reader.ReadInt();
 
-                    int count = count = reader.ReadInt();
+                    int count = reader.ReadInt();
 
                     for (int i = 0; i < count; i++)
                     {
