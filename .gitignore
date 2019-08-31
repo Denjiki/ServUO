@@ -8,6 +8,7 @@
 /Scripts/bin
 /Scripts/obj
 /Scripts/Output
+
 /Honesty
 /Logs
 /Backups
@@ -16,15 +17,16 @@
 /Docs
 /Reports
 /VitaNexCore
-NoCommit
-CUSTOM
-/.vs/
+/TheBox
+/.vs
+
 /staffHistory.xml
 /reportHistory.xml
 /firewall.cfg
 /drng64.dll
 /drng32.dll
 /libdrng.so
+
 *.pdb
 *.exe
 *.exe.mdb
@@ -35,3 +37,6 @@ CUSTOM
 *.bin
 *.csproj.user
 *.DotSettings.user
+
+!/Data/*
+!/bin/rosyln/*

@@ -1159,74 +1159,18 @@ namespace Server
                 name = String.Empty;
             }
 
-            string prefix = "";
-
-            if (ShowFameTitle && (m_Player || m_Body.IsHuman) && m_Fame >= 10000)
-            {
-                prefix = m_Female ? "Lady" : "Lord";
-            }
+            string prefix = ""; // still needs to be defined due to cliloc. Only defined in PlayerMobile. BaseCreature and BaseVendor require the suffix for the title and use the same cliloc.
 
             string suffix = "";
 
             if (PropertyTitle && Title != null && Title.Length > 0)
             {
                 suffix = Title;
-            }
-
-            BaseGuild guild = m_Guild;
-
-            if (guild != null && m_Player && m_DisplayGuildAbbr)
-            {
-                if (suffix.Length > 0)
-                    suffix = String.Format("{0} [{1}]", suffix, Utility.FixHtml(guild.Abbreviation));
-                else
-                    suffix = String.Format("[{0}]", Utility.FixHtml(guild.Abbreviation));
-            }
+            }          
 
             suffix = ApplyNameSuffix(suffix);
 
-            list.Add(1050045, "{0} \t{1}\t {2}", prefix, name, suffix); // ~1_PREFIX~~2_NAME~~3_SUFFIX~
-
-            if (guild != null && (m_DisplayGuildTitle || (m_Player && guild.Type != GuildType.Regular)))
-            {
-                string type;
-
-                if (guild.Type >= 0 && (int)guild.Type < m_GuildTypes.Length)
-                {
-                    type = m_GuildTypes[(int)guild.Type];
-                }
-                else
-                {
-                    type = "";
-                }
-
-                string title = GuildTitle;
-
-                if (title == null)
-                {
-                    title = "";
-                }
-                else
-                {
-                    title = title.Trim();
-                }
-
-                if (NewGuildDisplay && title.Length > 0)
-                {
-                    list.Add("{0}, {1}", Utility.FixHtml(title), Utility.FixHtml(guild.Name));
-                }
-                else
-                {
-                    if (title.Length > 0)
-                    {
-                        list.Add("{0}, {1} Guild{2}", Utility.FixHtml(title), Utility.FixHtml(guild.Name), type);
-                    }
-                    else
-                    {
-                        list.Add(Utility.FixHtml(guild.Name));
-                    }
-                }
-            }
+            list.Add(1050045, "{0} \t{1}\t {2}", prefix, name, suffix); // ~1_PREFIX~~2_NAME~~3_SUFFIX~           
         }
 
 		public virtual bool NewGuildDisplay { get { return false; } }
@@ -1547,9 +1491,19 @@ namespace Server
 			{
 				return true;
 			}
-			else if (target is Item && ((Item)target).RootParent == this)
+			else if (target is Item)
 			{
-				return true;
+                var item = (Item)target;
+
+                if (item.RootParent == this)
+                {
+                    return true;
+                }
+
+                if (item.Parent is Container)
+                {
+                    return InLOS(item.Parent);
+                }
 			}
 
 			return m_Map.LineOfSight(this, target);
@@ -4542,23 +4496,20 @@ namespace Server
 					else if (from.AccessLevel < AccessLevel.GameMaster && !from.InRange(item.GetWorldLocation(), 2))
 					{
 						reject = LRReason.OutOfRange;
-					}
+                    }
 					else if (!from.CanSee(item) || !from.InLOS(item))
 					{
 						reject = LRReason.OutOfSight;
-					}
+                    }
 					else if (!item.VerifyMove(from))
 					{
 						reject = LRReason.CannotLift;
 					}
-					#region Mondain's Legacy
 					else if (item.QuestItem && amount != item.Amount && !from.IsStaff())
 					{
 						reject = LRReason.Inspecific;
 						from.SendLocalizedMessage(1074868); // Stacks of quest items cannot be unstacked.
 					}
-					#endregion
-
 					else if (!item.IsAccessibleTo(from))
 					{
 						reject = LRReason.CannotLift;
@@ -4771,7 +4722,6 @@ namespace Server
 
 			oldItem.Amount = amount;
 			oldItem.OnAfterDuped(item);
-            //item.GridLocation = oldItem.GridLocation;
 
 			if (oldItem.Parent is Mobile)
 			{
@@ -5642,9 +5592,9 @@ namespace Server
 				}
 				else
 				{
-					Hits = newHits;
-
                     FatigueHandler(this, amount, DFA);
+
+					Hits = newHits;
 				}
 			}
 
@@ -7164,7 +7114,8 @@ namespace Server
 					}
 
 					OnFameChange(oldValue);
-				}
+                    EventSink.InvokeFameChange(new FameChangeEventArgs(this, oldValue, m_Fame));
+                }
 			}
 		}
 
@@ -7183,7 +7134,8 @@ namespace Server
 				{
 					m_Karma = value;
 					OnKarmaChange(old);
-				}
+                    EventSink.InvokeKarmaChange(new KarmaChangeEventArgs(this, old, m_Karma));
+                }
 			}
 		}
 
@@ -8010,6 +7962,10 @@ namespace Server
 
                     return false;
                 }
+                else if (!((Mobile)target).CanBeHarmedBy(this, message))
+                {
+                    return false;
+                }
             }
 
 			if (target == this)
@@ -8031,6 +7987,11 @@ namespace Server
 
 			return true;
 		}
+
+        public virtual bool CanBeHarmedBy(Mobile from, bool message)
+        {
+            return true;
+        }
 
 		public virtual bool IsHarmfulCriminal(IDamageable target)
 		{
@@ -9545,10 +9506,8 @@ namespace Server
 		{
 			if (poison != null)
 			{
-				#region Mondain's Legacy
 				LocalOverheadMessage(MessageType.Regular, 0x21, 1042857 + (poison.RealLevel * 2));
 				NonlocalOverheadMessage(MessageType.Regular, 0x21, 1042858 + (poison.RealLevel * 2), Name);
-				#endregion
 			}
 		}
 
@@ -9836,7 +9795,7 @@ namespace Server
 		[CommandProperty(AccessLevel.Counselor, AccessLevel.Decorator)]
 		public Point3D Location { get { return m_Location; } set { SetLocation(value, true); } }
 
-		[CommandProperty(AccessLevel.Counselor, AccessLevel.GameMaster)]
+        [CommandProperty(AccessLevel.Counselor, AccessLevel.GameMaster)]
 		public Point3D LogoutLocation { get { return m_LogoutLocation; } set { m_LogoutLocation = value; } }
 
 		[CommandProperty(AccessLevel.Counselor, AccessLevel.GameMaster)]
@@ -10127,7 +10086,10 @@ namespace Server
 					}
 
 					ClearFastwalkStack();
-				}
+
+                    EventSink.InvokeTeleportMovement(new TeleportMovementEventArgs(this, oldLocation, newLocation));
+
+                }
 
 				Map map = m_Map;
 
@@ -12780,7 +12742,14 @@ namespace Server
 			{
 				if (m_StatCap != value)
 				{
+                    int old = m_StatCap;
+
 					m_StatCap = value;
+
+                    if (old != m_StatCap)
+                    {
+                        EventSink.InvokeStatCapChange(new StatCapChangeEventArgs(this, old, m_StatCap));
+                    }
 
 					Delta(MobileDelta.StatCap);
 				}

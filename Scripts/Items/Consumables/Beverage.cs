@@ -816,7 +816,7 @@ namespace Server.Items
         }
     }
 
-    public abstract class BaseBeverage : Item, IHasQuantity, ICraftable, IResource
+    public abstract class BaseBeverage : Item, IHasQuantity, ICraftable, IResource, IQuality
     {
         private BeverageType m_Content;
         private int m_Quantity;
@@ -1028,6 +1028,14 @@ namespace Server.Items
         {
             base.GetProperties(list);
 
+            if (ShowQuantity)
+            {
+                list.Add(GetQuantityDescription());
+            }
+        }
+
+        public override void AddCraftedProperties(ObjectPropertyList list)
+        {
             if (_Crafter != null)
             {
                 list.Add(1050043, _Crafter.TitleName); // crafted by ~1_NAME~
@@ -1036,11 +1044,6 @@ namespace Server.Items
             if (_Quality == ItemQuality.Exceptional)
             {
                 list.Add(1060636); // Exceptional
-            }
-
-            if (ShowQuantity)
-            {
-                list.Add(GetQuantityDescription());
             }
         }
 
@@ -1156,7 +1159,14 @@ namespace Server.Items
                     src = (((AddonComponent)item).Addon as IWaterSource);
 
                 if (src == null || src.Quantity <= 0)
+                {
+                    if (item.ItemID >= 0xB41 && item.ItemID <= 0xB44)
+                    {
+                        Caddellite.CheckWaterSource(from, this, item);
+                    }
+
                     return;
+                }
 
                 if (from.Map != item.Map || !from.InRange(item.GetWorldLocation(), 2) || !from.InLOS(item))
                 {
@@ -1179,7 +1189,10 @@ namespace Server.Items
                     src.Quantity = 0;
                 }
 
-                from.SendLocalizedMessage(1010089); // You fill the container with water.
+                if (!(src is WaterContainerComponent))
+                {
+                    from.SendLocalizedMessage(1010089); // You fill the container with water.
+                }
             }
             else if (targ is Cow)
             {
@@ -1387,6 +1400,22 @@ namespace Server.Items
 
                     from.PlaySound(0x4E);
                 }
+            }
+            else if (targ is WaterContainerComponent)
+            {
+                WaterContainerComponent component = (WaterContainerComponent)targ;
+
+                if (component.IsFull)
+                {
+                    from.SendLocalizedMessage(500848); // Couldn't pour it there.  It was already full.
+                }
+                else
+                {
+                    component.Quantity += Quantity;
+                    Quantity = 0;
+                }
+
+                from.PlaySound(0x4E);
             }
             else if (from == targ)
             {

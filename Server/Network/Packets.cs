@@ -81,10 +81,10 @@ namespace Server.Network
 
 	public sealed class DamagePacket : Packet
 	{
-		public DamagePacket(IDamageable damageable, int amount)
+		public DamagePacket(IEntity entity, int amount)
 			: base(0x0B, 7)
 		{
-            m_Stream.Write(damageable.Serial);
+            m_Stream.Write(entity.Serial);
 
 			if (amount > 0xFFFF)
 			{
@@ -2145,8 +2145,8 @@ m_Stream.Write( (int) renderMode );
             m_Stream.Write((byte)0); // speed
             m_Stream.Write((byte)0); // duration
             m_Stream.Write((short)0); // unk
-            m_Stream.Write(false); // fixed direction
-            m_Stream.Write(false); // explode
+            m_Stream.Write(true); // fixed direction
+            m_Stream.Write(true); // explode
         }
     }
 

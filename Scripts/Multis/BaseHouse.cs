@@ -873,18 +873,18 @@ namespace Server.Multis
                 MovingCrate.Hide();
 
             if (m_Trash != null && m_Trash.Map != Map.Internal)
-                list.Add(m_Trash, Owner);
+                list[m_Trash] = Owner;
 
             foreach (Item item in LockDowns.Keys)
             {
                 if (item.Parent == null && item.Map != Map.Internal)
-                    list.Add(item, LockDowns[item]);
+                    list[item] = LockDowns[item];
             }
 
             foreach (Item item in VendorRentalContracts)
             {
                 if (item.Parent == null && item.Map != Map.Internal)
-                    list.Add(item, Owner);
+                    list[item] = Owner;
             }
 
             foreach (SecureInfo info in Secures.Where(i => !LockDowns.ContainsKey(i.Item)))
@@ -892,13 +892,13 @@ namespace Server.Multis
                 Item item = info.Item;
 
                 if (item.Parent == null && item.Map != Map.Internal)
-                    list.Add(item, Owner);
+                    list[item] = Owner;
             }
 
             foreach (Item item in Addons.Keys)
             {
                 if (item.Parent == null && item.Map != Map.Internal)
-                    list.Add(item, Owner);
+                    list[item] = Owner;
             }
 
             foreach (var mobile in PlayerVendors.OfType<PlayerVendor>())
@@ -906,13 +906,13 @@ namespace Server.Multis
                 mobile.Return();
 
                 if (mobile.Map != Map.Internal)
-                    list.Add(mobile, Owner);
+                    list[mobile] = Owner;
             }
 
             foreach (Mobile mobile in PlayerBarkeepers)
             {
                 if (mobile.Map != Map.Internal)
-                    list.Add(mobile, Owner);
+                    list[mobile] = Owner;
             }
 
             return list;
@@ -1326,6 +1326,12 @@ namespace Server.Multis
             if (from.AccessLevel >= AccessLevel.GameMaster || IsOwner(from) || !IsLockedDown(item))
                 return true;
 
+            bool lockedDown = m_LockDowns.ContainsKey(item);
+
+            // lockdown owner can access it
+            if (lockedDown && CheckLockdownOwnership(from, item))
+                return true;
+
             // ISecurable will set its own rules
             if (item is ISecurable)
                 return HasSecureAccess(from, ((ISecurable)item).Level);
@@ -1334,7 +1340,7 @@ namespace Server.Multis
                 return true;
 
             // locked down
-            if (m_LockDowns.ContainsKey(item))
+            if (lockedDown)
             {
                 // non friend, but item is on friends only list
                 if (!IsFriend(from) && IsInList(item, _AccessibleToFriends))
@@ -2098,7 +2104,7 @@ namespace Server.Multis
 
             if (locked)
             {
-                if (i is VendorRentalContract)
+                if (i is VendorRentalContract && i.RootParent == null)
                 {
                     if (!VendorRentalContracts.Contains(i))
                         VendorRentalContracts.Add(i);
@@ -2495,7 +2501,7 @@ namespace Server.Multis
             if(IsOwner(m))
                 return true;
 
-            if(item is Container || item.Parent is Container)
+            if(item is BaseContainer || item.Parent is BaseContainer)
             {
                 Item check = item.Parent is BaseContainer ? (Item)item.Parent : item;
 
@@ -2587,7 +2593,7 @@ namespace Server.Multis
                 if (info != null)
                 {
                     m.CloseGump(typeof (SetSecureLevelGump));
-                    m.SendGump(new Gumps.SetSecureLevelGump(m_Owner, info, this));
+                    m.SendGump(new Gumps.SetSecureLevelGump(m, info, this));
                 }
                 else if (item.Parent != null)
                 {
@@ -2643,7 +2649,7 @@ namespace Server.Multis
                     }
 
                     m.CloseGump(typeof (SetSecureLevelGump));
-                    m.SendGump(new Gumps.SetSecureLevelGump(m_Owner, info, this));
+                    m.SendGump(new Gumps.SetSecureLevelGump(m, info, this));
                 }
             }
         }
@@ -5152,7 +5158,7 @@ namespace Server.Multis
             if (house == null || !house.IsAosRules)
                 return null;
 
-            bool owner = house.IsOwner(from);
+            bool owner = house.IsOwner(from) || (house.IsLockedDown(item) && house.CheckLockdownOwnership(from, item));
             ISecurable sec = null;
 
             if (item is ISecurable)
@@ -5192,14 +5198,24 @@ namespace Server.Multis
 
         public override void OnClick()
         {
-            ISecurable sec = GetSecurable(Owner.From, m_Item);
-
-            if (sec != null)
+            if (m_Item is AuctionSafe)
             {
-                Mobile owner = sec is SecureInfo ? ((SecureInfo)sec).Owner : Owner.From;
+                AuctionSafe safe = (AuctionSafe)m_Item;
 
+                if (safe.Auction != null && !safe.Auction.CanModify)
+                {
+                    Owner.From.SendLocalizedMessage(1156431); // You cannot modify this while an auction is in progress.
+                    return;
+                }
+            }
+
+            ISecurable sec = GetSecurable(Owner.From, m_Item);
+            BaseHouse house = BaseHouse.FindHouseAt(m_Item);
+
+            if (house != null && sec != null)
+            {
                 Owner.From.CloseGump(typeof (SetSecureLevelGump));
-                Owner.From.SendGump(new SetSecureLevelGump(owner, sec, BaseHouse.FindHouseAt(m_Item)));
+                Owner.From.SendGump(new SetSecureLevelGump(Owner.From, sec, house));
             }
         }
     }

@@ -13,10 +13,24 @@ namespace Server.Items
         bool IsArcane { get; }
         int CurArcaneCharges { get; set; }
         int MaxArcaneCharges { get; set; }
+        int TempHue { get; set; }
     }
 
-    public abstract class BaseClothing : Item, IDyable, IScissorable, IFactionItem, ICraftable, IWearableDurability, IResource, ISetItem, IVvVItem, IOwnerRestricted, IArtifact, ICombatEquipment
+    public abstract class BaseClothing : Item, IDyable, IScissorable, IFactionItem, ICraftable, IWearableDurability, IResource, ISetItem, IVvVItem, IOwnerRestricted, IArtifact, ICombatEquipment, IEngravable, IQuality
     {
+        private string m_EngravedText;
+
+        [CommandProperty(AccessLevel.GameMaster)]
+        public string EngravedText
+        {
+            get { return m_EngravedText; }
+            set
+            {
+                m_EngravedText = value;
+                InvalidateProperties();
+            }
+        }
+
         #region Factions
         private FactionItem m_FactionState;
 
@@ -274,6 +288,26 @@ namespace Server.Items
         {
             get { return m_EnergyNonImbuing; }
             set { m_EnergyNonImbuing = value; }
+        }
+
+        public virtual int[] BaseResists
+        {
+            get
+            {
+                var list = new int[5];
+
+                list[0] = BasePhysicalResistance;
+                list[1] = BaseFireResistance;
+                list[2] = BaseColdResistance;
+                list[3] = BasePoisonResistance;
+                list[4] = BaseEnergyResistance;
+
+                return list;
+            }
+        }
+
+        public virtual void OnAfterImbued(Mobile m, int mod, int value)
+        {
         }
         #endregion
 
@@ -655,7 +689,7 @@ namespace Server.Items
                     if (AllowFemaleWearer)
                         from.LocalOverheadMessage(MessageType.Regular, 0x3B2, 1010388); // Only females can wear this.
                     else
-                        from.SendMessage("You may not wear this.");
+                        from.SendLocalizedMessage(1071936); // You cannot equip that.
 
                     return false;
                 }
@@ -664,7 +698,7 @@ namespace Server.Items
                     if (AllowMaleWearer)
                         from.LocalOverheadMessage(MessageType.Regular, 0x3B2, 1063343); // Only males can wear this.
                     else
-                        from.SendMessage("You may not wear this.");
+                        from.SendLocalizedMessage(1071936); // You cannot equip that.
 
                     return false;
                 }
@@ -822,7 +856,7 @@ namespace Server.Items
                         if (clothing.AllowFemaleWearer)
                             m.SendLocalizedMessage(1010388); // Only females can wear this.
                         else
-                            m.SendMessage("You may not wear this.");
+                            m.SendLocalizedMessage(1071936); // You cannot equip that.
 
                         m.AddToBackpack(clothing);
                     }
@@ -831,7 +865,7 @@ namespace Server.Items
                         if (clothing.AllowMaleWearer)
                             m.SendLocalizedMessage(1063343); // Only males can wear this.
                         else
-                            m.SendMessage("You may not wear this.");
+                            m.SendLocalizedMessage(1071936); // You cannot equip that.
 
                         m.AddToBackpack(clothing);
                     }
@@ -1016,6 +1050,8 @@ namespace Server.Items
             clothing.m_SetAttributes = new AosAttributes(newItem, m_SetAttributes);
             clothing.m_SetSkillBonuses = new AosSkillBonuses(newItem, m_SetSkillBonuses);
             #endregion
+
+            base.OnAfterDuped(newItem);
         }
 
         public BaseClothing(Serial serial)
@@ -1167,34 +1203,40 @@ namespace Server.Items
                 list.Add(Name);
         }
 
-        public override void AddWeightProperty(ObjectPropertyList list)
+        public override void AddCraftedProperties(ObjectPropertyList list)
         {
-            base.AddWeightProperty(list);
-
-            if (IsVvVItem)
-                list.Add(1154937); // VvV Item
-        }
-
-        public override void GetProperties(ObjectPropertyList list)
-        {
-            base.GetProperties(list);
-
             if (OwnerName != null)
-            {
                 list.Add(1153213, OwnerName);
-            }
 
             if (m_Crafter != null)
                 list.Add(1050043, m_Crafter.TitleName); // crafted by ~1_NAME~
 
             if (m_Quality == ItemQuality.Exceptional)
                 list.Add(1018303); // Exceptional
-            
+
             if (IsImbued == true)
                 list.Add(1080418); // (Imbued)
 
             if (m_Altered)
                 list.Add(1111880); // Altered
+        }
+
+        public override void AddWeightProperty(ObjectPropertyList list)
+        {
+            base.AddWeightProperty(list);
+
+            if (IsVvVItem)
+                list.Add(1154937); // VvV Item
+
+            if (!String.IsNullOrEmpty(m_EngravedText))
+            {
+                list.Add(1158847, Utility.FixHtml(m_EngravedText)); // Embroidered: ~1_MESSAGE~	
+            }
+        }
+
+        public override void AddNameProperties(ObjectPropertyList list)
+        {
+            base.AddNameProperties(list);
 
             #region Factions
             FactionEquipment.AddFactionProperties(this, list);
@@ -1375,12 +1417,10 @@ namespace Server.Items
                 list.Add(1061170, prop.ToString()); // strength requirement ~1_val~
 
             if ((prop = m_AosClothingAttributes.DurabilityBonus) > 0)
-                list.Add(1060410, prop.ToString()); // durability ~1_val~%
+                list.Add(1151780, prop.ToString()); // durability +~1_VAL~%
 
             if (m_HitPoints >= 0 && m_MaxHitPoints > 0)
                 list.Add(1060639, "{0}\t{1}", m_HitPoints, m_MaxHitPoints); // durability ~1_val~ / ~2_val~
-
-            EnchantedHotItem.AddProperties(this, list);
 
             #region Mondain's Legacy Sets
             if (IsSetItem && !m_SetEquipped)
@@ -1389,9 +1429,10 @@ namespace Server.Items
                 GetSetProperties(list);
             }
             #endregion
+        }
 
-            AddHonestyProperty(list);
-
+        public override void AddItemPowerProperties(ObjectPropertyList list)
+        {
             if (m_ItemPower != ItemPower.None)
             {
                 if (m_ItemPower <= ItemPower.LegendaryArtifact)
@@ -1431,7 +1472,7 @@ namespace Server.Items
         {
             bool drop = base.DropToWorld(from, p);
 
-            EnchantedHotItem.CheckDrop(from, this);
+            EnchantedHotItemSocket.CheckDrop(from, this);
 
             return drop;
         }
@@ -1524,7 +1565,10 @@ namespace Server.Items
         {
             base.Serialize(writer);
 
-            writer.Write(10); // version
+            writer.Write(11); // version
+
+            // Embroidery Tool version 11
+            writer.Write(m_EngravedText);
 
             // Version 10 - removed VvV Item (handled in VvV System) and BlockRepair (Handled as negative attribute)
 
@@ -1675,6 +1719,11 @@ namespace Server.Items
 
             switch ( version )
             {
+                case 11:
+                    {
+                        m_EngravedText = reader.ReadString();
+                        goto case 9;
+                    }
                 case 10:
                 case 9:
                     {
